@@ -4,13 +4,13 @@ load("@bazel_skylib//lib:paths.bzl", "paths")
 load("@rules_nodejs//nodejs:providers.bzl", "LinkablePackageInfo")
 
 _DOC = """Defines a library that executes in a node.js runtime.
-    
+
 The term "package" is defined at
 <https://nodejs.org/docs/latest-v16.x/api/packages.html>
 
 To be compatible with Bazel's remote execution protocol,
 all source files are copied to an an output directory,
-which is 
+which is
 
 NB: This rule is not yet tested on Windows
 """
@@ -19,14 +19,14 @@ _ATTRS = {
     "src": attr.label(
         allow_single_file = True,
         doc = """A TreeArtifact containing the npm package files.
-        
+
         Exactly one of `src` or `srcs` should be set.
         """,
     ),
     "srcs": attr.label_list(
         allow_files = True,
         doc = """Files to copy into the package directory.
-        
+
         Exactly one of `src` or `srcs` should be set.
         """,
     ),
@@ -34,13 +34,13 @@ _ATTRS = {
         doc = """Other packages this one depends on.
 
         This should include *all* modules the program may need at runtime.
-        
+
         > In typical usage, a node.js program sometimes requires modules which were
         > never declared as dependencies.
         > This pattern is typically used when the program has conditional behavior
         > that is enabled when the module is found (like a plugin) but the program
         > also runs without the dependency.
-        > 
+        >
         > This is possible because node.js doesn't enforce the dependencies are sound.
         > All files under `node_modules` are available to any program.
         > In contrast, Bazel makes it possible to make builds hermetic, which means that
@@ -96,6 +96,7 @@ def _copy_bash(ctx, srcs, dst):
         "mkdir -p \"%s\"" % dst.path,
     ]
     for src in srcs:
+        # print(src.path)
         dst_path = _dst_path(ctx, src, dst, ctx.attr.remap_paths)
         cmds.append("""
 if [[ ! -e "{src}" ]]; then echo "file '{src}' does not exist"; exit 1; fi
@@ -106,7 +107,10 @@ else
     mkdir -p "{dst}"
     cp -rf "{src}/" "{dst}"
 fi
-""".format(src = src.path, dst_dir = paths.dirname(dst_path), dst = dst_path))
+""".format(
+    src = src.path,
+    dst_dir = paths.dirname(dst_path),
+    dst = dst_path))
         # print("%s -> %s" % (src.path, dst_path))
 
     ctx.actions.run_shell(

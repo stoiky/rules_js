@@ -1,18 +1,19 @@
 "repository rules for importing packages from npm"
 
-load("//js/private:translate_package_lock.bzl", lib = "translate_package_lock")
+# load("//js/private:translate_package_lock.bzl", lib = "translate_package_lock")
+load("//js/private:translate_rush_pnpm.bzl", lib = "translate_rush_pnpm")
 
 def _npm_import_impl(repository_ctx):
-    repository_ctx.download_and_extract(
-        output = "extract_tmp",
-        url = "https://registry.npmjs.org/{0}/-/{1}-{2}.tgz".format(
-            repository_ctx.attr.package,
-            # scoped packages contain a slash in the name, which doesn't appear in the later part of the URL
-            repository_ctx.attr.package.split("/")[-1],
-            repository_ctx.attr.version,
-        ),
-        integrity = repository_ctx.attr.integrity,
-    )
+    # repository_ctx.download_and_extract(
+    #     output = "extract_tmp",
+    #     url = "https://registry.npmjs.org/{0}/-/{1}-{2}.tgz".format(
+    #         repository_ctx.attr.package,
+    #         # scoped packages contain a slash in the name, which doesn't appear in the later part of the URL
+    #         repository_ctx.attr.package.split("/")[-1],
+    #         repository_ctx.attr.version,
+    #     ),
+    #     integrity = repository_ctx.attr.integrity,
+    # )
 
     for patch in repository_ctx.attr.patches:
         repository_ctx.patch(patch)
@@ -151,7 +152,13 @@ def npm_import(integrity, package, version, deps = [], name = None, patches = []
         version = version,
     )
 
-translate_package_lock = repository_rule(
+# translate_package_lock = repository_rule(
+#     doc = lib.doc,
+#     implementation = lib.implementation,
+#     attrs = lib.attrs,
+# )
+
+translate_rush_pnpm = repository_rule(
     doc = lib.doc,
     implementation = lib.implementation,
     attrs = lib.attrs,
