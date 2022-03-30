@@ -1,30 +1,22 @@
-"repository rules for importing packages from npm"
+"repository rules for importing packages from rush lib"
 
-load("//js/private:translate_package_lock.bzl", lib = "translate_package_lock")
+load("@bazel_skylib//lib:paths.bzl", "paths")
+load("//js/private:translate_rush.bzl", lib = "translate_rush")
 
-def _npm_import_impl(repository_ctx):
-    repository_ctx.download_and_extract(
-        output = "extract_tmp",
-        url = "https://registry.npmjs.org/{0}/-/{1}-{2}.tgz".format(
-            repository_ctx.attr.package,
-            # scoped packages contain a slash in the name, which doesn't appear in the later part of the URL
-            repository_ctx.attr.package.split("/")[-1],
-            repository_ctx.attr.version,
-        ),
-        integrity = repository_ctx.attr.integrity,
-    )
+_WORKSPACE_REROOTED_PATH = "_"
 
-    for patch in repository_ctx.attr.patches:
-        repository_ctx.patch(patch)
+# Returns the path to a file within the re-rooted user workspace
+# under _WORKSPACE_REROOTED_PATH in this repo rule's external workspace
+def _rerooted_workspace_path(repository_ctx, f):
+    return paths.normalize(paths.join(_WORKSPACE_REROOTED_PATH, f.package, f.name))
 
-    # npm packages are always published with one top-level directory inside the tarball, but the name is not predictable
-    # so we have to run an external program to inspect the downloaded folder.
-    if repository_ctx.os.name == "Windows":
-        result = repository_ctx.execute(["dir", "/b", "extract_tmp"])
-    else:
-        result = repository_ctx.execute(["ls", "extract_tmp"])
-    if result.return_code:
-        fail("failed to inspect content of npm download: \nSTDOUT:\n%s\nSTDERR:\n%s" % (result.stdout, result.stderr))
+# Returns the path to the package.json directory within the re-rooted user workspace
+# under _WORKSPACE_REROOTED_PATH in this repo rule's external workspace
+def _rerooted_workspace_package_json_dir(repository_ctx):
+    return str(repository_ctx.path(_rerooted_workspace_path(repository_ctx, repository_ctx.attr.package_json)).dirname)
+
+
+def _rush_import_impl(repository_ctx):
 
     repository_ctx.file("BUILD.bazel", """
 load("@aspect_rules_js//js:nodejs_package.bzl", "nodejs_package")
@@ -34,7 +26,7 @@ load("@rules_nodejs//third_party/github.com/bazelbuild/bazel-skylib:rules/copy_f
 copy_file(
     # The default target in this repository
     name = "_{name}",
-    src = "extract_tmp/{nested_folder}",
+    src = "{nested_folder}",
     # This attribute comes from rules_nodejs patch of
     # https://github.com/bazelbuild/bazel-skylib/pull/323
     is_directory = True,
@@ -60,13 +52,14 @@ alias(
 )
 """.format(
         name = repository_ctx.name,
-        nested_folder = result.stdout.rstrip("\n"),
+        nested_folder = "./",
+        # nested_folder = result.stdout.rstrip("\n"),
         package_name = repository_ctx.attr.package,
         deps = [str(d.relative(":pkg")) for d in repository_ctx.attr.deps],
     ))
 
-_npm_import = repository_rule(
-    implementation = _npm_import_impl,
+_rush_import = repository_rule(
+    implementation = _rush_import_impl,
     attrs = {
         "deps": attr.label_list(),
         "integrity": attr.string(),
@@ -76,11 +69,11 @@ _npm_import = repository_rule(
     },
 )
 
-def npm_import(integrity, package, version, deps = [], name = None, patches = []):
+def rush_import(integrity, package, version, deps = [], name = None, patches = []):
     """Import a single npm package into Bazel.
 
     Normally you'd want to use `translate_package_lock` to import all your packages at once.
-    It generates `npm_import` rules.
+    It generates `rush_import` rules.
     You can create these manually if you want to have exact control.
 
     Bazel will only fetch the given package from an external registry if the package is
@@ -93,7 +86,7 @@ def npm_import(integrity, package, version, deps = [], name = None, patches = []
     or some `.bzl` file loaded from it. For example, with this code in `WORKSPACE`:
 
     ```starlark
-    npm_import(
+    rush_import(
         integrity = "sha512-zjQ69G564OCIWIOHSXyQEEDpdpGl+G348RAKY0XXy9Z5kU9Vzv1GMNnkar/ZJ8dzXB3COzD9Mo9NtRZ4xfgUww==",
         package = "@types/node",
         version = "15.12.2",
@@ -142,7 +135,7 @@ def npm_import(integrity, package, version, deps = [], name = None, patches = []
             where `package` is the top-level folder in the archive on npm.
     """
 
-    _npm_import(
+    _rush_import(
         name = name or lib.repository_name(package, version),
         deps = deps,
         integrity = integrity,
@@ -151,7 +144,7 @@ def npm_import(integrity, package, version, deps = [], name = None, patches = []
         version = version,
     )
 
-translate_package_lock = repository_rule(
+translate_rush = repository_rule(
     doc = lib.doc,
     implementation = lib.implementation,
     attrs = lib.attrs,
