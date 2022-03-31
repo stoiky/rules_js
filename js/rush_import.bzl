@@ -1,22 +1,13 @@
 "repository rules for importing packages from rush lib"
 
-load("@bazel_skylib//lib:paths.bzl", "paths")
 load("//js/private:translate_rush.bzl", lib = "translate_rush")
 
-_WORKSPACE_REROOTED_PATH = "_"
-
-# Returns the path to a file within the re-rooted user workspace
-# under _WORKSPACE_REROOTED_PATH in this repo rule's external workspace
-def _rerooted_workspace_path(repository_ctx, f):
-    return paths.normalize(paths.join(_WORKSPACE_REROOTED_PATH, f.package, f.name))
-
-# Returns the path to the package.json directory within the re-rooted user workspace
-# under _WORKSPACE_REROOTED_PATH in this repo rule's external workspace
-def _rerooted_workspace_package_json_dir(repository_ctx):
-    return str(repository_ctx.path(_rerooted_workspace_path(repository_ctx, repository_ctx.attr.package_json)).dirname)
-
-
 def _rush_import_impl(repository_ctx):
+    repository_ctx.symlink(repository_ctx.attr.integrity, "tmp")
+
+    # result = repository_ctx.execute(["mkdir", "-p", "tmp"])
+    # if result.return_code:
+    #     fail("failed to inspect content of npm download: \nSTDOUT:\n%s\nSTDERR:\n%s" % (result.stdout, result.stderr))
 
     repository_ctx.file("BUILD.bazel", """
 load("@aspect_rules_js//js:nodejs_package.bzl", "nodejs_package")
@@ -52,8 +43,8 @@ alias(
 )
 """.format(
         name = repository_ctx.name,
-        nested_folder = "./",
-        # nested_folder = result.stdout.rstrip("\n"),
+        nested_folder = "tmp",
+        # nested_folder = "@hzrepo//platform/common/utils/errors",
         package_name = repository_ctx.attr.package,
         deps = [str(d.relative(":pkg")) for d in repository_ctx.attr.deps],
     ))
