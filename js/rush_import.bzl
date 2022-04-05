@@ -1,13 +1,16 @@
 "repository rules for importing packages from rush lib"
 
+load("@bazel_skylib//lib:paths.bzl", "paths")
 load("//js/private:translate_rush.bzl", lib = "translate_rush")
 
 def _rush_import_impl(repository_ctx):
-    repository_ctx.symlink(repository_ctx.attr.integrity, "tmp")
-
-    # result = repository_ctx.execute(["mkdir", "-p", "tmp"])
-    # if result.return_code:
-    #     fail("failed to inspect content of npm download: \nSTDOUT:\n%s\nSTDERR:\n%s" % (result.stdout, result.stderr))
+    pnpm_src = repository_ctx.attr.integrity
+    # We check if there's a node_modules subfolder and change to that if so
+    # node_modules = paths.join(repository_ctx.attr.integrity, "node_modules")
+    # if paths.is_absolute(node_modules):
+    #     pnpm_src = node_modules
+    # print(pnpm_src)
+    repository_ctx.symlink(pnpm_src, "tmp")
 
     repository_ctx.file("BUILD.bazel", """
 load("@aspect_rules_js//js:nodejs_package.bzl", "nodejs_package")
@@ -44,7 +47,6 @@ alias(
 """.format(
         name = repository_ctx.name,
         nested_folder = "tmp",
-        # nested_folder = "@hzrepo//platform/common/utils/errors",
         package_name = repository_ctx.attr.package,
         deps = [str(d.relative(":pkg")) for d in repository_ctx.attr.deps],
     ))

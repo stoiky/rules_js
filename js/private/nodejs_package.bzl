@@ -96,7 +96,6 @@ def _copy_bash(ctx, srcs, dst):
         "mkdir -p \"%s\"" % dst.path,
     ]
     for src in srcs:
-        # print(src.path)
         dst_path = _dst_path(ctx, src, dst, ctx.attr.remap_paths)
         cmds.append("""
 if [[ ! -e "{src}" ]]; then echo "file '{src}' does not exist"; exit 1; fi
@@ -111,7 +110,7 @@ fi
     src = src.path,
     dst_dir = paths.dirname(dst_path),
     dst = dst_path))
-        # print("%s -> %s" % (src.path, dst_path))
+        print("%s -> %s" % (src.path, dst_path))
 
     ctx.actions.run_shell(
         inputs = srcs,
@@ -132,6 +131,7 @@ def _nodejs_package_impl(ctx):
         fail("src must be a directory (a TreeArtifact produced by another rule)")
 
     package_name = ctx.attr.package_name.strip()
+    # print("Package: %s" % package_name)
     if not package_name:
         fail("package_name attr must not be empty")
     if ctx.attr.srcs:
