@@ -159,7 +159,6 @@ def _get_direct_dependencies(info, prod, dev, no_optional):
         print("no direct dependencies to translate in lockfile")
 
     for (dep_name, dep_version) in lock_dependencies.items():
-        print(npm_utils.versioned_name(dep_name, dep_version))
         direct_dependencies.append(npm_utils.versioned_name(dep_name, dep_version))
     return direct_dependencies
 
@@ -174,6 +173,7 @@ def _process_lockfile(rctx, lockfile, prod, dev, no_optional):
         msg = "translate_pnpm_lock only works with pnpm lockfile version 5.3, found %s" % lock_version
         fail(msg)
 
+    direct_dependencies = []
     # If there's one single project in the lockfile
     # we will find 'specifiers' there along 'dependencies' etc
     if "specifiers" in lockfile:
@@ -186,9 +186,8 @@ def _process_lockfile(rctx, lockfile, prod, dev, no_optional):
             # Root level project, if there is none, this should be skipped
             if (importer_name == "." and len(importer_info["specifiers"]) == 0):
                 continue
-            direct_dependencies = _get_direct_dependencies(importer_info, prod, dev, no_optional) 
+            direct_dependencies = direct_dependencies + _get_direct_dependencies(importer_info, prod, dev, no_optional) 
     else:
-        direct_dependencies = []
         # not yet sure if there is such a scenario
         fail("scenario not covered, exit with error")
 
@@ -207,7 +206,7 @@ def _process_lockfile(rctx, lockfile, prod, dev, no_optional):
             msg = "unsupported package path %s" % packagePath
             fail(msg)
         package_name = "/".join(path_segments[0:-1])
-        package_version = path_segments[-1].replace("@", "_at_").replace("+","-")
+        package_version = path_segments[-1]
         resolution = packageSnapshot.get("resolution")
         if not resolution:
             msg = "package %s has no resolution field" % packagePath
@@ -216,13 +215,28 @@ def _process_lockfile(rctx, lockfile, prod, dev, no_optional):
         if not integrity:
             msg = "package %s resolution has no integrity field" % packagePath
             fail(msg)
+        #####
+        # WARNING - Overwrite temporarily integrity 
+        #####
+        local_pnpm_path_to_package = "%s@%s" % (package_name.replace("/", "+"), package_version)
+        # eg ./common/temp/node_modules/.pnpm/@adobe-fonts+fontpicker@1.0.1_typescript@4.5.4/node_modules/@adobe-fonts/fontpicker
+        integrity = paths.join(
+            _user_workspace_root(rctx), 
+            "common", 
+            "temp", 
+            "node_modules", 
+            ".pnpm", 
+            local_pnpm_path_to_package,
+            "node_modules",
+            package_name)
+
         dev = resolution.get("dev", False)
         optional = resolution.get("optional", False)
         has_bin = resolution.get("hasBin", False)
         requires_build = resolution.get("requiresBuild", False)
         package = {
             "name": package_name,
-            "version": package_version,
+            "version": package_version.replace("@", "_at_").replace("+","-"),
             "integrity": integrity,
             "dependencies": {},
             "dev": dev,
@@ -299,6 +313,7 @@ def _impl(rctx):
         link_package = rctx.attr.pnpm_lock.package
 
     direct_dependencies = lockfile.get("dependencies")
+    print("Direct deps (%s)" % len(direct_dependencies))
     packages = lockfile.get("packages")
 
     repositories_bzl = [
