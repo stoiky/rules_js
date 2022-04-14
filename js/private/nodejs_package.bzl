@@ -4,13 +4,13 @@ load("@bazel_skylib//lib:paths.bzl", "paths")
 load("@rules_nodejs//nodejs:providers.bzl", "LinkablePackageInfo")
 
 _DOC = """Defines a library that executes in a node.js runtime.
-    
+
 The term "package" is defined at
 <https://nodejs.org/docs/latest-v16.x/api/packages.html>
 
 To be compatible with Bazel's remote execution protocol,
 all source files are copied to an an output directory,
-which is 
+which is
 
 NB: This rule is not yet tested on Windows
 """
@@ -19,14 +19,14 @@ _ATTRS = {
     "src": attr.label(
         allow_single_file = True,
         doc = """A TreeArtifact containing the npm package files.
-        
+
         Exactly one of `src` or `srcs` should be set.
         """,
     ),
     "srcs": attr.label_list(
         allow_files = True,
         doc = """Files to copy into the package directory.
-        
+
         Exactly one of `src` or `srcs` should be set.
         """,
     ),
@@ -34,13 +34,13 @@ _ATTRS = {
         doc = """Other packages this one depends on.
 
         This should include *all* modules the program may need at runtime.
-        
+
         > In typical usage, a node.js program sometimes requires modules which were
         > never declared as dependencies.
         > This pattern is typically used when the program has conditional behavior
         > that is enabled when the module is found (like a plugin) but the program
         > also runs without the dependency.
-        > 
+        >
         > This is possible because node.js doesn't enforce the dependencies are sound.
         > All files under `node_modules` are available to any program.
         > In contrast, Bazel makes it possible to make builds hermetic, which means that
@@ -106,8 +106,11 @@ else
     mkdir -p "{dst}"
     cp -rf "{src}/" "{dst}"
 fi
-""".format(src = src.path, dst_dir = paths.dirname(dst_path), dst = dst_path))
-        # print("%s -> %s" % (src.path, dst_path))
+""".format(
+    src = src.path,
+    dst_dir = paths.dirname(dst_path),
+    dst = dst_path))
+        print("%s -> %s" % (src.path, dst_path))
 
     ctx.actions.run_shell(
         inputs = srcs,
@@ -128,6 +131,7 @@ def _nodejs_package_impl(ctx):
         fail("src must be a directory (a TreeArtifact produced by another rule)")
 
     package_name = ctx.attr.package_name.strip()
+    # print("Package: %s" % package_name)
     if not package_name:
         fail("package_name attr must not be empty")
     if ctx.attr.srcs:

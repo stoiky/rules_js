@@ -9,7 +9,7 @@ _DOC = """Execute a program in the node.js runtime.
 The version of node is determined by Bazel's toolchain selection.
 In the WORKSPACE you used `nodejs_register_toolchains` to provide options to Bazel.
 Then Bazel selects from these options based on the requested target platform.
-Use the 
+Use the
 [`--toolchain_resolution_debug`](https://docs.bazel.build/versions/main/command-line-reference.html#flag--toolchain_resolution_debug)
 Bazel option to see more detail about the selection.
 
@@ -24,7 +24,7 @@ This means that all transitive dependencies of the `data` attribute will be avai
 runtime for every execution of this program.
 
 This requires that Bazel was run with
-[`--enable_runfiles`](https://docs.bazel.build/versions/main/command-line-reference.html#flag--enable_runfiles). 
+[`--enable_runfiles`](https://docs.bazel.build/versions/main/command-line-reference.html#flag--enable_runfiles).
 
 In some language runtimes, this concept is called "static linking", so we use the same term
 in aspect_rules_js. This is in contrast to "dynamic linking", where the program needs to
@@ -144,13 +144,18 @@ def _bash_launcher(ctx, linkable, args):
         ])
     else:
         node_path = ""
-    node_path = "export NODE_PATH=" + ":".join(node_paths)
+    node_path = ":".join(node_paths)
     ctx.actions.write(
         launcher,
         """#!{bash}
 {rlocation_function}
 set -o pipefail -o errexit -o nounset
-{node_path}
+set +u
+if [[ -n $NODE_PATH ]]; then
+    export NODE_PATH=$NODE_PATH:{node_path}
+else
+    export NODE_PATH={node_path}
+fi
 $(rlocation {node}) \\
 $(rlocation {entry_point}) \\
 {args} $@
