@@ -113,6 +113,8 @@ _ALIAS_TMPL = \
 """
 
 def _impl(rctx):
+    # TODO: we may wish to get the files from the local system 
+    # instead of downloading them
     tarball = "package.tgz"
     rctx.download(
         output = tarball,
