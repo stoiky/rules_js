@@ -22,7 +22,7 @@ Run `bazel run //:gazelle` to keep them up-to-date.
 ## Using this as a development dependency of other rules
 
 You'll commonly find that you develop in another WORKSPACE, such as
-some other ruleset that depends on @aspect_rules_js, or in a nested
+some other ruleset that depends on `@aspect_rules_js`, or in a nested
 WORKSPACE in the integration_tests folder.
 
 To always tell Bazel to use this directory rather than some release

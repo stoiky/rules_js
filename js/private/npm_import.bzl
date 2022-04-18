@@ -86,7 +86,7 @@ _NODEJS_PACKAGE_TMPL = \
         src = "@{rctx_name}//:{dir}",
         package_name = "{package_name}",
         package_version = "{package_version}",
-        visibility = ["//visibility:public"],{maybe_transitive}{maybe_deps}
+        visibility = ["//visibility:public"],{maybe_indirect}{maybe_deps}
     )
 """
 
@@ -94,54 +94,26 @@ _NODEJS_PACKAGE_EXPERIMENTAL_REF_DEPS_TMPL = _NODEJS_PACKAGE_TMPL + \
 """    _nodejs_package(
         name = "{namespace}__{bazel_name}__ref",
         package_name = "{package_name}",
-        package_version = "{package_version}",{maybe_transitive}
+        package_version = "{package_version}",{maybe_indirect}
     )
 """
 
 _ALIAS_TMPL = \
 """    native.alias(
-        name = "{alias}",
+        name = "{namespace}__{alias}",
         actual = ":{namespace}__{bazel_name}",
         visibility = ["//visibility:public"],
     )
 
     native.alias(
-        name = "{alias}__dir",
+        name = "{namespace}__{alias}__dir",
         actual = ":{namespace}__{bazel_name}__dir",
         visibility = ["//visibility:public"],
     )
 """
 
 def _impl(rctx):
-    # TODO: we may wish to get the files from the local system 
-    # instead of downloading them
     dirname = "package"
-
-    # tarball = "package.tgz"
-    # rctx.download(
-    #     output = tarball,
-    #     url = "https://registry.npmjs.org/{0}/-/{1}-{2}.tgz".format(
-    #         rctx.attr.package_name,
-    #         # scoped packages contain a slash in the name, which doesn't appear in the later part of the URL
-    #         rctx.attr.package_name.split("/")[-1],
-    #         rctx.attr.package_version,
-    #     ),
-    #     integrity = rctx.attr.integrity,
-    # )
-
-    # mkdir_args = ["mkdir", "-p", dirname] if not is_windows_os(rctx) else ["cmd", "/c", "if not exist {dir} (mkdir {dir})".format(dir = dirname.replace("/", "\\"))]
-    # result = rctx.execute(mkdir_args)
-    # if result.return_code:
-    #     msg = "mkdir %s failed: \nSTDOUT:\n%s\nSTDERR:\n%s" % (dirname, result.stdout, result.stderr)
-    #     fail(msg)
-
-    # # npm packages are always published with one top-level directory inside the tarball, tho the name is not predictable
-    # # so we use tar here which takes a --strip-components N argument instead of rctx.download_and_extract
-    # untar_args = ["tar", "-xf", tarball, "--strip-components", str(1), "-C", dirname]
-    # result = rctx.execute(untar_args)
-    # if result.return_code:
-    #     msg = "tar %s failed: \nSTDOUT:\n%s\nSTDERR:\n%s" % (dirname, result.stdout, result.stderr)
-    #     fail(msg)
 
     rctx.symlink(rctx.attr.integrity, dirname)
 
@@ -154,7 +126,7 @@ def _impl(rctx):
         dep_version = dep_split[-1]
         dep_target = "{namespace}__{bazel_name}__ref" if rctx.attr.experimental_reference_deps else "{namespace}__{bazel_name}"
         deps.append(dep_target.format(
-            namespace = rctx.attr.namespace,
+            namespace = npm_utils.nodejs_package_target_namespace,
             bazel_name = npm_utils.bazel_name(dep_name, dep_version)
         ))
 
@@ -163,7 +135,7 @@ def _impl(rctx):
     bazel_name = npm_utils.bazel_name(rctx.attr.package_name, rctx.attr.package_version)
     nodejs_package_tmpl = _NODEJS_PACKAGE_EXPERIMENTAL_REF_DEPS_TMPL if rctx.attr.experimental_reference_deps else _NODEJS_PACKAGE_TMPL
     nodejs_package_bzl = [nodejs_package_tmpl.format(
-        namespace = rctx.attr.namespace,
+        namespace = npm_utils.nodejs_package_target_namespace,
         dir = dirname,
         link_package_guard = rctx.attr.link_package_guard,
         package_name = rctx.attr.package_name,
@@ -171,17 +143,17 @@ def _impl(rctx):
         rctx_name = rctx.name,
         nodejs_package_bzl = "@%s//:%s" % (rctx.name, nodejs_package_bzl_file),
         bazel_name = bazel_name,
-        maybe_transitive = """
-        transitive = True,""" if rctx.attr.transitive else "",
+        maybe_indirect = """
+        indirect = True,""" if rctx.attr.indirect else "",
         maybe_deps = ("""
         deps = %s,""" % deps) if len(deps) > 0 else "",
     )]
 
     # Add an namespace if this is a direct dependency
-    if not rctx.attr.transitive:
+    if not rctx.attr.indirect:
         nodejs_package_bzl.append(_ALIAS_TMPL.format(
-            alias = npm_utils.alias_target_name(rctx.attr.namespace, rctx.attr.package_name),
-            namespace = rctx.attr.namespace,
+            alias = npm_utils.alias_target_name(rctx.attr.package_name),
+            namespace = npm_utils.nodejs_package_target_namespace,
             bazel_name = bazel_name,
         ))
 
@@ -225,17 +197,8 @@ _ATTRS = {
     "patches": attr.label_list(
         doc = """Patch files to apply onto the downloaded npm package.""",
     ),
-    "transitive": attr.bool(
-        doc = """If True, this is a transitive npm dependency which is not linked as a top-level node_module.""",
-    ),
-    "namespace": attr.string(
-        doc = """The namespace prefix to use. Convienence aliases will be created
-        in the package that the npm dep is linked prefixed with this namespace:
-        "@//link/package:{namespace}_{package_name}".
-
-        This is set automatically by translate_package_lock to the translate_package_lock
-        repository name.""",
-        default = "npm",
+    "indirect": attr.bool(
+        doc = """If True, this is a indirect npm dependency which will not be linked as a top-level node_module.""",
     ),
     "link_package_guard": attr.string(
         doc = """When explictly set, check that the generated nodejs_package() marcro

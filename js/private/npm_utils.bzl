@@ -20,15 +20,15 @@ def _virtual_store_name(name, version):
     escaped = name.replace("/", "+")
     return "%s@%s" % (escaped, version)
 
-def _alias_target_name(namespace, name):
+def _alias_target_name(name):
     "Make an alias target name for a given package"
-    escaped = name.replace("/", "+")
-    return "%s__%s" % (namespace, escaped)
+    return name.replace("/", "+")
 
 npm_utils = struct(
     bazel_name = _bazel_name,
     versioned_name = _versioned_name,
     virtual_store_name = _virtual_store_name,
     alias_target_name = _alias_target_name,
-    ensure_not_link_version = _ensure_not_link_version,
+    # Prefix namespace to use for generated nodejs_binary targets and aliases
+    nodejs_package_target_namespace = "npm",
 )
