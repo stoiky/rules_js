@@ -206,7 +206,7 @@ def _process_lockfile(rctx, lockfile, prod, dev, no_optional):
             msg = "unsupported package path %s" % packagePath
             fail(msg)
         package_name = "/".join(path_segments[0:-1])
-        package_version = path_segments[-1]
+        package_version = path_segments[-1].replace("@", "_at_").replace("+","-")
         resolution = packageSnapshot.get("resolution")
         if not resolution:
             msg = "package %s has no resolution field" % packagePath
@@ -218,7 +218,7 @@ def _process_lockfile(rctx, lockfile, prod, dev, no_optional):
         #####
         # WARNING - Overwrite temporarily integrity 
         #####
-        local_pnpm_path_to_package = "%s@%s" % (package_name.replace("/", "+"), package_version)
+        local_pnpm_path_to_package = "%s@%s" % (package_name.replace("/", "+"), path_segments[-1])
         # eg ./common/temp/node_modules/.pnpm/@adobe-fonts+fontpicker@1.0.1_typescript@4.5.4/node_modules/@adobe-fonts/fontpicker
         integrity = paths.join(
             _user_workspace_root(rctx), 
@@ -236,7 +236,8 @@ def _process_lockfile(rctx, lockfile, prod, dev, no_optional):
         requires_build = resolution.get("requiresBuild", False)
         package = {
             "name": package_name,
-            "version": package_version.replace("@", "_at_").replace("+","-"),
+            # "version": package_version.replace("@", "_at_").replace("+","-"),
+            "version": package_version,
             "integrity": integrity,
             "dependencies": {},
             "dev": dev,
@@ -404,7 +405,7 @@ def _impl(rctx):
     rctx.file("repositories.bzl", "\n".join(generated_by_line + repositories_bzl))
     rctx.file(nodejs_packages_bzl_file, "\n".join(generated_by_line + nodejs_packages_header_bzl + empty_line + nodejs_packages_bzl + empty_line))
     rctx.file("package.bzl", "\n".join(generated_by_line + package_bzl))
-    rctx.file("BUILD.bazel", "")
+    rctx.file("BUILD.bazel", "exports_files([\"repositories.bzl\"])")
 
 translate_pnpm_lock = struct(
     doc = _DOC,
