@@ -50,16 +50,6 @@ def rules_js_dependencies():
         urls = ["https://github.com/bazelbuild/rules_nodejs/releases/download/{0}/rules_nodejs-core-{0}.tar.gz".format(versions.rules_nodejs)],
     )
 
-    # TEMP TEMP
-    maybe(
-        http_archive,
-        name = "aspect_bazel_lib",
-        sha256 = "3a61afcfad63d69615c6995902b82679afb65d91f9612e935a375e83471db7fc",
-        strip_prefix = "bazel-lib-5cad49ef5594e4c021664d5f2a008896387b1a5c",
-        url = "https://github.com/gregmagolan/bazel-lib/archive/5cad49ef5594e4c021664d5f2a008896387b1a5c.tar.gz",
-    )
-    # TEMP TEMP
-
     maybe(
         http_archive,
         name = "aspect_bazel_lib",
