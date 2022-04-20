@@ -231,10 +231,6 @@ set -e
 # Mop up after main program
 # ==============================================================================
 
-if [ "${NODEJS_BINARY__CAPTURE_EXIT_CODE:-}" ]; then
-    echo -n "$RESULT" > "$NODEJS_BINARY__CAPTURE_EXIT_CODE"
-fi
-
 if [ "${NODEJS_BINARY__EXPECTED_EXIT_CODE:-}" ]; then
     if [ "$RESULT" != "$NODEJS_BINARY__EXPECTED_EXIT_CODE" ]; then
         printf "\nERROR: ${LOG_PREFIX}: expected exit code to be '${NODEJS_BINARY__EXPECTED_EXIT_CODE}', but got '${RESULT}'\n" >&2
@@ -257,6 +253,7 @@ fi
 
 if [ "${NODEJS_BINARY__CAPTURE_EXIT_CODE:-}" ]; then
     # Exit zero if the exit code was captured
+    echo -n "$RESULT" > "$NODEJS_BINARY__CAPTURE_EXIT_CODE"
     exit 0
 else
     exit $RESULT
