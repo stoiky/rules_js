@@ -313,3 +313,101 @@ diff_test(
     file1 = "expected9",
     file2 = "actual9",
 )
+
+#######################################
+# Test case 10
+# set env variable
+
+write_file(
+    name = "write10",
+    out = "case10.js",
+    content = ["""process.stdout.write("to stdout")
+process.stderr.write("to stderr")
+require('fs').writeFileSync(process.argv[2], process.env.FOO)
+process.exit(42)
+"""],
+)
+
+write_file(
+    name = "expected10",
+    out = "expected10.txt",
+    content = ["BAR"],
+)
+
+write_file(
+    name = "expected10_stdout",
+    out = "expected10_stdout.txt",
+    content = ["to stdout"],
+)
+
+write_file(
+    name = "expected10_stderr",
+    out = "expected10_stderr.txt",
+    content = ["to stderr"],
+)
+
+write_file(
+    name = "expected10_result",
+    out = "expected10_result.txt",
+    content = ["42"],
+)
+
+nodejs_binary(
+    name = "bin10",
+    entry_point = "case10.js",
+    env = {
+        "FOO": "BAR"
+    },
+)
+
+nodejs_test(
+    name = "test10_test",
+    entry_point = "case10.js",
+    args = ["dummy"],
+    env = {
+        "FOO": "BAR",
+        "NODEJS_BINARY__EXPECTED_EXIT_CODE": "42",
+        "NODEJS_BINARY__VERBOSE": "1",
+    },
+)
+
+run_binary(
+    name = "run10",
+    outs = [
+        "actual10",
+        "actual10_stdout",
+        "actual10_stderr",
+        "actual10_result",
+    ],
+    env = {
+        "NODEJS_BINARY__CAPTURE_STDOUT": "example/actual10_stdout",
+        "NODEJS_BINARY__CAPTURE_STDERR": "example/actual10_stderr",
+        "NODEJS_BINARY__CAPTURE_EXIT_CODE": "example/actual10_result",
+    },
+    args = ["example/actual10"],
+    tool = ":bin10",
+)
+
+diff_test(
+    name = "test10",
+    file1 = "expected10",
+    file2 = "actual10",
+)
+
+diff_test(
+    name = "test10_stdout",
+    file1 = "expected10_stdout",
+    file2 = "actual10_stdout",
+)
+
+diff_test(
+    name = "test10_stderr",
+    file1 = "expected10_stderr",
+    file2 = "actual10_stderr",
+)
+
+diff_test(
+    name = "test10_result",
+    file1 = "expected10_result",
+    file2 = "actual10_result",
+)

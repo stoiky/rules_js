@@ -109,9 +109,9 @@ def run_binary(
     }
 
     # Change working directory if `chdir` is set and the tool is a nodejs_binary; this is handled
-    # internally in nodejs_binary when the BAZEL_CHDIR is set
+    # internally in nodejs_binary when the NODEJS_BINARY__CHDIR is set
     if chdir:
-        extra_env["BAZEL_CHDIR"] = chdir
+        extra_env["NODEJS_BINARY__CHDIR"] = chdir
 
     _run_binary(
         name = name,

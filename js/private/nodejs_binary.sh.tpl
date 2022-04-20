@@ -5,7 +5,12 @@ set -o pipefail -o errexit -o nounset
 
 {env}
 
-# --- begin RUNFILES initialization ---
+LOG_PREFIX="aspect_rules_js[nodejs_binary]"
+
+# ==============================================================================
+# Initialize RUNFILES environment variable
+# ==============================================================================
+
 # It helps to determine if we are running on a Windows environment (excludes WSL as it acts like Unix)
 function is_windows {
     case "$(uname -s)" in
@@ -54,40 +59,40 @@ function normalize_windows_path {
 # blaze.
 # Case 5a is handled like case 1.
 # Case 6a is handled like case 3.
-if [[ -n "${RUNFILES_MANIFEST_ONLY:-}" ]]; then
+if [ "${RUNFILES_MANIFEST_ONLY:-}" ]; then
     # Windows only has a manifest file instead of symlinks.
-    if [[ $(is_windows) -eq "1" ]]; then
+    if [ $(is_windows) -eq "1" ]; then
         # If Windows normalizing the path and case insensitive removing the `/MANIFEST` part of the path
         NORMALIZED_RUNFILES_MANIFEST_FILE_PATH=$(normalize_windows_path $RUNFILES_MANIFEST_FILE)
         RUNFILES=$(sed 's|\/MANIFEST$||i' <<< $NORMALIZED_RUNFILES_MANIFEST_FILE_PATH)
     else
         RUNFILES=${RUNFILES_MANIFEST_FILE%/MANIFEST}
     fi
-elif [[ -n "${TEST_SRCDIR:-}" ]]; then
+elif [ "${TEST_SRCDIR:-}" ]; then
     # Case 4, bazel has identified runfiles for us.
-    RUNFILES="${TEST_SRCDIR:-}"
+    RUNFILES="$TEST_SRCDIR"
 else
     case "$0" in
     /*) self="$0" ;;
     *) self="$PWD/$0" ;;
     esac
     while true; do
-        if [[ -e "$self.runfiles" ]]; then
+        if [ -e "$self.runfiles" ]; then
             RUNFILES="$self.runfiles"
             break
         fi
 
-        if [[ $self == *.runfiles/* ]]; then
+        if [ $self == *.runfiles/* ]; then
             RUNFILES="${self%%.runfiles/*}.runfiles"
             # don't break; this is a last resort for case 6b
         fi
 
-        if [[ ! -L "$self" ]]; then
+        if [ ! -L "$self" ]; then
             break;
         fi
 
         readlink="$(readlink "$self")"
-        if [[ "$readlink" = /* ]]; then
+        if [ "$readlink" = /* ]; then
             self="$readlink"
         else
             # resolve relative symlink
@@ -95,59 +100,165 @@ else
         fi
     done
 
-    if [[ -z "$RUNFILES" ]]; then
-        echo " >>>> FAIL: RUNFILES environment variable is not set. <<<<" >&2
+    if [ -z "$RUNFILES" ]; then
+        printf "\nERROR: ${LOG_PREFIX}: RUNFILES environment variable is not set\n" >&2
         exit 1
     fi
 fi
 export RUNFILES
-# --- end RUNFILES initialization ---
 
+# ==============================================================================
+# Prepare to run main program
+# ==============================================================================
+
+echo "$PWD"
 if [[ "$PWD" == *"/bazel-out/"* ]]; then
-    # We in runfiles, find the execroot.
-    # Look for `bazel-out` which is used to determine the the path to `execroot/my_wksp`. This works in
-    # all cases including on rbe where the execroot is a path such as `/b/f/w`. For example, when in
-    # runfiles on rbe, bazel runs the process in a directory such as
-    # `/b/f/w/bazel-out/k8-fastbuild/bin/path/to/pkg/some_test.sh.runfiles/my_wksp`. From here we can
-    # determine the execroot `b/f/w` by finding the first instance of bazel-out.
-    readonly bazel_out="/bazel-out/"
-    readonly rest=${PWD#*$bazel_out}
-    readonly index=$(( ${#PWD} - ${#rest} - ${#bazel_out} ))
-    if [[ ${index} < 0 ]]; then
-        echo "No 'bazel-out' folder found in path '${PWD}'!" >&2
-        exit 1
-    fi
-    EXECROOT=${PWD:0:${index}}
+    # We in runfiles
     node="$PWD/{node}"
     entry_point="$PWD/{entry_point}"
 else
     # We are in execroot or in some other context all together such as a nodejs_image or a manually
     # run nodejs_binary.
-    EXECROOT=$PWD
     node="$RUNFILES/{workspace_name}/{node}"
     entry_point="$RUNFILES/{workspace_name}/{entry_point}"
     if [ -z "${BAZEL_BINDIR:-}" ]; then
-        printf "\n>>>> FAIL: BAZEL_BINDIR must be set when not running out of runfiles so nodejs_binary can run out of the output tree on build actions. <<<<\n\n" >&2
+        printf "\nERROR: ${LOG_PREFIX}: BAZEL_BINDIR must be set in environment when not running out of runfiles so nodejs_binary can run out of the output tree on build actions\n" >&2
         exit 1
     fi
     cd $BAZEL_BINDIR
 fi
 
 if [ ! -f "$node" ]; then
-    printf "\n>>>> FAIL: The node binary '$node' not found in runfiles. <<<<\n\n" >&2
+    printf "\nERROR: ${LOG_PREFIX}: the node binary '$node' not found in runfiles\n" >&2
     exit 1
 fi
 if [ ! -x "$node" ]; then
-    printf "\n>>>> FAIL: The node binary '$node' is not executable. <<<<\n\n" >&2
+    printf "\nERROR: ${LOG_PREFIX}: the node binary '$node' is not executable\n" >&2
     exit 1
 fi
 if [ ! -f "$entry_point" ]; then
-    printf "\n>>>> FAIL: The entry_point '$entry_point' not found in runfiles. <<<<\n\n" >&2
+    printf "\nERROR: ${LOG_PREFIX}: the entry_point '$entry_point' not found in runfiles\n" >&2
     exit 1
 fi
 
-if [[ "${BAZEL_CHDIR:-}" ]]; then
-    cd $BAZEL_CHDIR
+if [ "${NODEJS_BINARY__CHDIR:-}" ]; then
+    cd $NODEJS_BINARY__CHDIR
 fi
 
-"$node" "$entry_point" "$@"
+if [ "${NODEJS_BINARY__CAPTURE_STDOUT:-}" ]; then
+    STDOUT_CAPTURE="$NODEJS_BINARY__CAPTURE_STDOUT"
+fi
+
+if [ "${NODEJS_BINARY__CAPTURE_STDERR:-}" ]; then
+    STDERR_CAPTURE="$NODEJS_BINARY__CAPTURE_STDERR"
+fi
+
+if [ "${NODEJS_BINARY__SILENT_ON_SUCCESS:-}" ]; then
+  if [ -z "${STDOUT_CAPTURE:-}" ]; then
+    STDOUT_CAPTURE_IS_NOT_AN_OUTPUT=true
+    STDOUT_CAPTURE=$(mktemp)
+  fi
+  if [ -z "${STDOUT_CAPTURE:-}" ]; then
+    STDERR_CAPTURE_IS_NOT_AN_OUTPUT=true
+    STDERR_CAPTURE=$(mktemp)
+  fi
+fi
+
+# Bash does not forward termination signals to any child process when
+# running in docker so need to manually trap and forward the signals
+_term() {
+  kill -TERM "${child}" 2>/dev/null
+}
+
+_int() {
+  kill -INT "${child}" 2>/dev/null
+}
+
+_exit() {
+  EXIT_CODE=$?
+
+  if [ "$EXIT_CODE" != 0 ]; then
+    if [[ ${STDOUT_CAPTURE_IS_NOT_AN_OUTPUT:-} == true ]]; then
+      cat "$STDOUT_CAPTURE"
+      rm "$STDOUT_CAPTURE"
+    fi
+    if [[ ${STDERR_CAPTURE_IS_NOT_AN_OUTPUT:-} == true ]]; then
+      cat "$STDERR_CAPTURE"
+      rm "$STDERR_CAPTURE"
+    fi
+  fi
+
+  exit $EXIT_CODE
+}
+
+set +e
+
+# ==============================================================================
+# Run the main program
+# ==============================================================================
+
+if [ "${NODEJS_BINARY__VERBOSE:-}" ]; then
+    echo "${LOG_PREFIX}: running: $node $entry_point $@" >&2
+fi
+if [ "${STDOUT_CAPTURE:-}" ] && [ "${STDERR_CAPTURE:-}" ]; then
+    "$node" "$entry_point" "$@" <&0 >$STDOUT_CAPTURE 2>$STDERR_CAPTURE &
+elif [ "${STDOUT_CAPTURE:-}" ]; then
+    "$node" "$entry_point" "$@" <&0 >$STDOUT_CAPTURE &
+elif [ "${STDERR_CAPTURE:-}" ]; then
+    "$node" "$entry_point" "$@" <&0 2>$STDERR_CAPTURE &
+else
+    "$node" "$entry_point" "$@" <&0 &
+fi
+
+# ==============================================================================
+# Wait for program to finish
+# ==============================================================================
+
+readonly child=$!
+trap _term SIGTERM
+trap _int SIGINT
+trap _exit EXIT
+wait "$child"
+# Remove trap after first signal has been receieved and wait for child to exit
+# (first wait returns immediatel if SIGTERM is received while waiting). Second
+# wait is a no-op if child has already terminated.
+trap - SIGTERM SIGINT
+wait "$child"
+
+RESULT="$?"
+set -e
+
+# ==============================================================================
+# Mop up after main program
+# ==============================================================================
+
+if [ "${NODEJS_BINARY__CAPTURE_EXIT_CODE:-}" ]; then
+    echo -n "$RESULT" > "$NODEJS_BINARY__CAPTURE_EXIT_CODE"
+fi
+
+if [ "${NODEJS_BINARY__EXPECTED_EXIT_CODE:-}" ]; then
+    if [ "$RESULT" != "$NODEJS_BINARY__EXPECTED_EXIT_CODE" ]; then
+        printf "\nERROR: ${LOG_PREFIX}: expected exit code to be '${NODEJS_BINARY__EXPECTED_EXIT_CODE}', but got '${RESULT}'\n" >&2
+        if [ $RESULT -eq 0 ]; then
+            # This exit code is handled specially by Bazel:
+            # https://github.com/bazelbuild/bazel/blob/486206012a664ecb20bdb196a681efc9a9825049/src/main/java/com/google/devtools/build/lib/util/ExitCode.java#L44
+            readonly BAZEL_EXIT_TESTS_FAILED=3;
+            exit $BAZEL_EXIT_TESTS_FAILED
+        fi
+        exit $RESULT
+    else
+        exit 0
+    fi
+fi
+
+if [ $RESULT -eq 0 ]; then
+    # TODO: add optional coverage support
+    echo
+fi
+
+if [ "${NODEJS_BINARY__CAPTURE_EXIT_CODE:-}" ]; then
+    # Exit zero if the exit code was captured
+    exit 0
+else
+    exit $RESULT
+fi
