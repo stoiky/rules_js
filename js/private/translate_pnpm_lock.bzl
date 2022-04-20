@@ -159,6 +159,9 @@ def _get_direct_dependencies(info, prod, dev, no_optional):
         print("no direct dependencies to translate in lockfile")
 
     for (dep_name, dep_version) in lock_dependencies.items():
+        if "_" in dep_version:
+            dep_version = dep_version.split("_")[0]
+            # print("%s -> %s" % (dep_version, dep_version.split("_")[0]))
         direct_dependencies.append(npm_utils.versioned_name(dep_name, dep_version))
     return direct_dependencies
 
@@ -222,8 +225,9 @@ def _process_lockfile(rctx, lockfile, prod, dev, no_optional):
         if len(path_segments) != 2 and len(path_segments) != 3:
             msg = "unsupported package path %s" % packagePath
             fail(msg)
-        package_name = "/".join(path_segments[0:-1])
-        package_version = path_segments[-1].replace("@", "_at_").replace("+","-")
+        package_name = packagePath[1:].rpartition("/")[0]
+        # package_version = path_segments[-1].replace("@", "_at_").replace("+","-")
+        package_version = packagePath.rpartition("/")[2].split("_")[0]
         resolution = packageSnapshot.get("resolution")
         if not resolution:
             msg = "package %s has no resolution field" % packagePath
@@ -235,17 +239,19 @@ def _process_lockfile(rctx, lockfile, prod, dev, no_optional):
         #####
         # WARNING - Overwrite temporarily integrity 
         #####
-        local_pnpm_path_to_package = "%s@%s" % (package_name.replace("/", "+"), path_segments[-1])
-        # eg ./common/temp/node_modules/.pnpm/@adobe-fonts+fontpicker@1.0.1_typescript@4.5.4/node_modules/@adobe-fonts/fontpicker
-        integrity = paths.join(
-            _user_workspace_root(rctx), 
-            "common", 
-            "temp", 
-            "node_modules", 
-            ".pnpm", 
-            local_pnpm_path_to_package,
-            "node_modules",
-            package_name)
+        if rctx.name == "npm_deps":
+            local_pnpm_path_to_package = "%s@%s" % (package_name.replace("/", "+"), path_segments[-1])
+            # eg ./common/temp/node_modules/.pnpm/@adobe-fonts+fontpicker@1.0.1_typescript@4.5.4/node_modules/@adobe-fonts/fontpicker
+            integrity = paths.join(
+                _user_workspace_root(rctx), 
+                "common", 
+                "temp", 
+                "node_modules", 
+                ".pnpm", 
+                local_pnpm_path_to_package,
+                "node_modules",
+                package_name)
+            # print(integrity)
 
         dev = resolution.get("dev", False)
         optional = resolution.get("optional", False)
@@ -253,7 +259,7 @@ def _process_lockfile(rctx, lockfile, prod, dev, no_optional):
         requires_build = resolution.get("requiresBuild", False)
         package = {
             "name": package_name,
-            "version": package_version,
+            "version": package_version.replace("@", "_at_").replace("+", "-"),
             "integrity": integrity,
             "dependencies": {},
             "dev": dev,

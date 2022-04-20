@@ -2,11 +2,15 @@
   "lockfileVersion": 5.3,
   "specifiers": {
     "@gregmagolan/test-b": "^0.0.2",
-    "@types/node": "^15.12.2"
+    "@types/node": "^15.12.2",
+    "react": "^17.0.2",
+    "test-peer-dependencies-package": "1.3.0"
   },
   "devDependencies": {
     "@gregmagolan/test-b": "0.0.2",
-    "@types/node": "15.14.9"
+    "@types/node": "15.14.9",
+    "react": "17.0.2",
+    "test-peer-dependencies-package": "1.3.0_react@17.0.2"
   },
   "packages": {
     "/@gregmagolan/test-a/0.0.1": {
@@ -27,6 +31,56 @@
     "/@types/node/15.14.9": {
       "resolution": {
         "integrity": "sha512-qjd88DrCxupx/kJD5yQgZdcYKZKSIGBVDIBE1/LTGcNm3d2Np/jxojkdePDdfnBHJc5W7vSMpbJ1aB7p/Py69A=="
+      },
+      "dev": true
+    },
+    "/js-tokens/4.0.0": {
+      "resolution": {
+        "integrity": "sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ=="
+      },
+      "dev": true
+    },
+    "/loose-envify/1.4.0": {
+      "resolution": {
+        "integrity": "sha512-lyuxPGr/Wfhrlem2CL/UcnUc1zcqKAImBDzukY7Y5F/yQiNdko6+fRLevlw1HgMySw7f611UIY408EtxRSoK3Q=="
+      },
+      "hasBin": true,
+      "dependencies": {
+        "js-tokens": "4.0.0"
+      },
+      "dev": true
+    },
+    "/object-assign/4.1.1": {
+      "resolution": {
+        "integrity": "sha1-IQmtx5ZYh8/AXLvUQsrIv7s2CGM="
+      },
+      "engines": {
+        "node": ">=0.10.0"
+      },
+      "dev": true
+    },
+    "/react/17.0.2": {
+      "resolution": {
+        "integrity": "sha512-gnhPt75i/dq/z3/6q/0asP78D0u592D5L1pd7M8P+dck6Fu/jJeL6iVVK23fptSUZj8Vjf++7wXA8UNclGQcbA=="
+      },
+      "engines": {
+        "node": ">=0.10.0"
+      },
+      "dependencies": {
+        "loose-envify": "1.4.0",
+        "object-assign": "4.1.1"
+      },
+      "dev": true
+    },
+    "/test-peer-dependencies-package/1.3.0_react@17.0.2": {
+      "resolution": {
+        "integrity": "sha512-q22WQcYOlQS8gf7pD4dixRFJUyEYKCZ9JOPoovFpN/2L1IfNo6SpwH+knfL8JxX/wfOmruK13El+UA9q25QsQQ=="
+      },
+      "peerDependencies": {
+        "react": "^17.0.2"
+      },
+      "dependencies": {
+        "react": "17.0.2"
       },
       "dev": true
     }
