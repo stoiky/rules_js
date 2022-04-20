@@ -89,7 +89,7 @@ def run_nodejs_binary(
 
         **kwargs: Additional arguments
     """
-    all_srcs = list(srcs)
+    extra_srcs = []
     if copy_srcs_to_bin:
         copy_to_bin_name = "%s_copy_srcs_to_bin" % name
         _copy_to_bin(
@@ -97,7 +97,7 @@ def run_nodejs_binary(
             srcs = srcs,
             tags = kwargs.get("tags"),
         )
-        all_srcs.append(":%s" % copy_to_bin_name)
+        extra_srcs = [":%s" % copy_to_bin_name]
 
     # Automatically add common and useful make variables to the environment for nodejs_binary targets
     # under rules_js
@@ -138,7 +138,7 @@ def run_nodejs_binary(
         name = name,
         tool = tool,
         env = dicts.add(extra_env, env),
-        srcs = all_srcs,
+        srcs = srcs + extra_srcs,
         output_dir = output_dir,
         outs = outs + extra_outs,
         args = args,
