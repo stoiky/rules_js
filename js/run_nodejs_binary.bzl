@@ -7,7 +7,7 @@ load("@aspect_bazel_lib//lib:run_binary.bzl", _run_binary = "run_binary")
 load("@aspect_bazel_lib//lib:copy_to_bin.bzl", _copy_to_bin = "copy_to_bin")
 load("@bazel_skylib//lib:dicts.bzl", "dicts")
 
-def run_binary(
+def run_nodejs_binary(
     name,
     tool,
     env = {},
@@ -16,9 +16,12 @@ def run_binary(
     outs = [],
     args = [],
     chdir = "",
-    copy_srcs_to_bin = False,
+    stdout = None,
+    stderr = None,
+    exit_code_out = None,
+    copy_srcs_to_bin = True,
     **kwargs):
-    """Runs a binary as a build action.
+    """Wrapper around @aspect_bazel_lib run_binary that adds convienence attributes for using a nodejs_binary tool.
 
     This rule does not require Bash `native.genrule`.
 
@@ -57,35 +60,32 @@ def run_binary(
 
             By default, Bazel always runs in the workspace root.
 
-            To run in the directory containing the run_binary under the source tree, use
+            To run in the directory containing the run_nodejs_binary under the source tree, use
             `chdir = package_name()` (or if you're in a macro, use `native.package_name()`).
 
-            To run in the output directory where the run_binary writes outputs, use
+            To run in the output directory where the run_nodejs_binary writes outputs, use
             `chdir = "$(RULEDIR)"`
 
             WARNING: this will affect other paths passed to the program, either as arguments or in configuration files,
             which are workspace-relative.
 
             You may need `../../` segments to re-relativize such paths to the new working directory.
-            In a `BUILD` file you could do something like this to point to the output path:
 
-            ```python
-            run_binary(
-                ...
-                chdir = package_name(),
-                # ../.. segments to re-relative paths from the chdir back to workspace
-                args = ["/".join([".."] * len(package_name().split("/")) + ["$@"])],
-            )
-            ```
+        stderr: set to capture the stderr of the binary to a file, which can later be used as an input to another target
+                subject to the same semantics as `outs`
 
-        copy_srcs_to_bin: Set to True if you want all srcs files copied to the output tree that are not already there.
+        stdout: set to capture the stdout of the binary to a file, which can later be used as an input to another target
+                subject to the same semantics as `outs`
 
-            To reference the output tree location of a source file that is copied, prepend an `$(execpath)`
-            expansions with `$(BINDIR)`. For example, `$(BINDIR)/$(execpath //path/to/source:file)`.
+        exit_code_out: set to capture the exit code of the binary to a file, which can later be used as an input to another target
+                subject to the same semantics as `outs`. Note that setting this will force the binary to exit 0.
+                If the binary creates outputs and these are declared, they must still be created
+
+        copy_srcs_to_bin: When True, all srcs files are copied to the output tree that are not already there.
 
         **kwargs: Additional arguments
     """
-    all_srcs = srcs
+    all_srcs = list(srcs)
     if copy_srcs_to_bin:
         copy_to_bin_name = "%s_copy_srcs_to_bin" % name
         _copy_to_bin(
@@ -95,7 +95,7 @@ def run_binary(
         )
         all_srcs.append(":%s" % copy_to_bin_name)
 
-    # Automatically add common and useful make variables to the environment for run_binary targets
+    # Automatically add common and useful make variables to the environment for nodejs_binary targets
     # under rules_js
     extra_env = {
         "BAZEL_BINDIR": "$(BINDIR)",
@@ -110,16 +110,30 @@ def run_binary(
 
     # Change working directory if `chdir` is set and the tool is a nodejs_binary; this is handled
     # internally in nodejs_binary when the NODEJS_BINARY__CHDIR is set
+    chdir_prefix = ""
     if chdir:
         extra_env["NODEJS_BINARY__CHDIR"] = chdir
+        chdir_prefix = "/".join([".."] * len(chdir.split("/"))) + "/"
 
+    # Capture stdout, stderr and/or the exit code
+    extra_outs = []
+    if stdout:
+        extra_env["NODEJS_BINARY__CAPTURE_STDOUT"] = "%s$(rootpath %s)" % (chdir_prefix, stdout)
+        extra_outs.append(stdout)
+    if stderr:
+        extra_env["NODEJS_BINARY__CAPTURE_STDERR"] = "%s$(rootpath %s)" % (chdir_prefix, stderr)
+        extra_outs.append(stderr)
+    if exit_code_out:
+        extra_env["NODEJS_BINARY__CAPTURE_EXIT_CODE"] = "%s$(rootpath %s)" % (chdir_prefix, exit_code_out)
+        extra_outs.append(exit_code_out)
+    
     _run_binary(
         name = name,
         tool = tool,
         env = dicts.add(extra_env, env),
         srcs = all_srcs,
         output_dir = output_dir,
-        outs = outs,
+        outs = outs + extra_outs,
         args = args,
         **kwargs,
     )
