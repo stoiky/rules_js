@@ -150,6 +150,4 @@ if [[ "${BAZEL_CHDIR:-}" ]]; then
     cd $BAZEL_CHDIR
 fi
 
-echo $PWD
-
 "$node" "$entry_point" "$@"

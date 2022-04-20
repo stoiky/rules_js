@@ -211,8 +211,7 @@ _NPM_IMPORT_TMPL = \
         integrity = "{integrity}",
         link_package_guard = "{link_package_guard}",
         package_name = "{package_name}",
-        package_version = "{package_version}",
-        {maybe_deps}{maybe_indirect}{maybe_patches}{maybe_patch_args}
+        package_version = "{package_version}",{maybe_deps}{maybe_indirect}{maybe_patches}{maybe_patch_args}
     )
 """
 
@@ -236,10 +235,10 @@ _PACKAGE_TMPL = \
 load("@aspect_rules_js//js/private:npm_utils.bzl", "npm_utils")
 
 def package(name):
-    return Label("@//{link_package}:{namespace}__" + npm_utils.alias_target_name(name))
+    return Label("@{workspace}//{link_package}:{namespace}__" + npm_utils.alias_target_name(name))
 
 def package_dir(name):
-    return Label("@//{link_package}:{namespace}__" + npm_utils.alias_target_name(name) + "__dir")
+    return Label("@{workspace}//{link_package}:{namespace}__" + npm_utils.alias_target_name(name) + "__dir")
 """
 
 def _impl(rctx):
@@ -341,6 +340,7 @@ def _impl(rctx):
             ))
 
     package_bzl = [_PACKAGE_TMPL.format(
+        workspace = rctx.attr.pnpm_lock.workspace_name,
         namespace = npm_utils.nodejs_package_target_namespace,
         link_package = link_package,
     )]
