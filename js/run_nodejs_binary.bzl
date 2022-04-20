@@ -15,7 +15,7 @@ def run_nodejs_binary(
     output_dir = False,
     outs = [],
     args = [],
-    chdir = "",
+    chdir = None,
     stdout = None,
     stderr = None,
     exit_code_out = None,
