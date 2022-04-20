@@ -378,7 +378,7 @@ run_nodejs_binary(
     stdout = "actual10_stdout",
     stderr = "actual10_stderr",
     exit_code_out = "actual10_result",
-    chdir = "example",
+    chdir = package_name(),
     args = ["actual10"],
     tool = ":bin10",
 )

@@ -112,14 +112,13 @@ def run_nodejs_binary(
         "BAZEL_COMPILATION_MODE": "$(COMPILATION_MODE)",
     }
 
-    # Change working directory if `chdir` is set and the tool is a nodejs_binary; this is handled
-    # internally in nodejs_binary when the NODEJS_BINARY__CHDIR is set
+    # Configure working directory to `chdir` is set
     chdir_prefix = ""
     if chdir:
         extra_env["NODEJS_BINARY__CHDIR"] = chdir
         chdir_prefix = "/".join([".."] * len(chdir.split("/"))) + "/"
 
-    # Capture stdout, stderr and/or the exit code
+    # Configure capturing stdout, stderr and/or the exit code
     extra_outs = []
     if stdout:
         extra_env["NODEJS_BINARY__CAPTURE_STDOUT"] = "%s$(rootpath %s)" % (chdir_prefix, stdout)
@@ -131,6 +130,7 @@ def run_nodejs_binary(
         extra_env["NODEJS_BINARY__CAPTURE_EXIT_CODE"] = "%s$(rootpath %s)" % (chdir_prefix, exit_code_out)
         extra_outs.append(exit_code_out)
     
+    # Configure silent on success
     if silent_on_success:
         extra_env["NODEJS_BINARY__SILENT_ON_SUCCESS"] = "1"
 
