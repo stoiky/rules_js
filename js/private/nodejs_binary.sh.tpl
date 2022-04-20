@@ -111,7 +111,6 @@ export RUNFILES
 # Prepare to run main program
 # ==============================================================================
 
-echo "$PWD"
 if [[ "$PWD" == *"/bazel-out/"* ]]; then
     # We in runfiles
     node="$PWD/{node}"
@@ -253,7 +252,7 @@ fi
 
 if [ $RESULT -eq 0 ]; then
     # TODO: add optional coverage support
-    echo
+    echo -n
 fi
 
 if [ "${NODEJS_BINARY__CAPTURE_EXIT_CODE:-}" ]; then

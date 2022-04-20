@@ -19,6 +19,7 @@ def run_nodejs_binary(
     stdout = None,
     stderr = None,
     exit_code_out = None,
+    silent_on_success = True,
     copy_srcs_to_bin = True,
     **kwargs):
     """Wrapper around @aspect_bazel_lib run_binary that adds convienence attributes for using a nodejs_binary tool.
@@ -81,6 +82,9 @@ def run_nodejs_binary(
                 subject to the same semantics as `outs`. Note that setting this will force the binary to exit 0.
                 If the binary creates outputs and these are declared, they must still be created
 
+        silent_on_success: produce no output on stdout nor stderr when program exits with status code 0.
+                This makes node binaries match the expected bazel paradigm.
+
         copy_srcs_to_bin: When True, all srcs files are copied to the output tree that are not already there.
 
         **kwargs: Additional arguments
@@ -127,6 +131,9 @@ def run_nodejs_binary(
         extra_env["NODEJS_BINARY__CAPTURE_EXIT_CODE"] = "%s$(rootpath %s)" % (chdir_prefix, exit_code_out)
         extra_outs.append(exit_code_out)
     
+    if silent_on_success:
+        extra_env["NODEJS_BINARY__SILENT_ON_SUCCESS"] = "1"
+
     _run_binary(
         name = name,
         tool = tool,
