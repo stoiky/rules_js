@@ -112,8 +112,8 @@ _ATTRS = {
     "_runfiles_lib": attr.label(default = "@bazel_tools//tools/bash/runfiles"),
 }
 
-_ENV_SET = """export {var}={value}"""
-_ENV_SET_IFF_NOT_SET = """if [[ -z "${{{var}:-}}" ]]; then export {var}={value}; fi"""
+_ENV_SET = """export {var}=\"{value}\""""
+_ENV_SET_IFF_NOT_SET = """if [[ -z "${{{var}:-}}" ]]; then export {var}=\"{value}\"; fi"""
 
 # Do the opposite of _to_manifest_path in
 # https://github.com/bazelbuild/rules_nodejs/blob/8b5d27400db51e7027fe95ae413eeabea4856f8e/nodejs/toolchain.bzl#L50
@@ -135,7 +135,7 @@ def _bash_launcher(ctx, entry_point, args):
         ))
     if ctx.attr.chdir:
         envs.append(_ENV_SET_IFF_NOT_SET.format(
-            var = "BAZEL_CHDIR",
+            var = "NODEJS_BINARY__CHDIR",
             value = " ".join([expand_variables(ctx, exp, attribute_name = "env") for exp in expand_locations(ctx, ctx.attr.chdir, ctx.attr.data).split(" ")]),
         ))
 
