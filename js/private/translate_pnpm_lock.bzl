@@ -173,6 +173,7 @@ def _process_lockfile(rctx, lockfile, prod, dev, no_optional):
         msg = "translate_pnpm_lock only works with pnpm lockfile version 5.3, found %s" % lock_version
         fail(msg)
 
+    packages = {}
     direct_dependencies = []
     # If there's one single project in the lockfile
     # we will find 'specifiers' there along 'dependencies' etc
@@ -186,7 +187,25 @@ def _process_lockfile(rctx, lockfile, prod, dev, no_optional):
             # Root level project, if there is none, this should be skipped
             if (importer_name == "." and len(importer_info["specifiers"]) == 0):
                 continue
-            direct_dependencies = direct_dependencies + _get_direct_dependencies(importer_info, prod, dev, no_optional) 
+            project_path = importer_name.removeprefix("../../") # get this programatically
+            project_package = _get_local_package(rctx, project_path)
+            project_name = project_package["name"]
+            project_version = "workspace" # temporary
+            package = {
+                "name": project_name,
+                "version": project_version,
+                "integrity": paths.join(_user_workspace_root(rctx), project_path),
+                "dependencies": {},
+                "dev": False,
+                "optional": False,
+                "has_bin": False, # TODO: check if the package has bin key should be enough
+                "requires_build": False,
+            }
+            dependencies = _get_direct_dependencies(importer_info, prod, dev, no_optional) 
+            if dependencies:
+                package["dependencies"] = dependencies
+            packages[npm_utils.versioned_name(project_name, project_version)] = package
+            direct_dependencies = direct_dependencies + dependencies
     else:
         # not yet sure if there is such a scenario
         fail("scenario not covered, exit with error")
@@ -194,8 +213,6 @@ def _process_lockfile(rctx, lockfile, prod, dev, no_optional):
     lock_packages = lockfile.get("packages")
     if not lock_packages:
         fail("no packages in lockfile")
-
-    packages = {}
 
     for (packagePath, packageSnapshot) in lock_packages.items():
         if not packagePath.startswith("/"):
@@ -236,7 +253,6 @@ def _process_lockfile(rctx, lockfile, prod, dev, no_optional):
         requires_build = resolution.get("requiresBuild", False)
         package = {
             "name": package_name,
-            # "version": package_version.replace("@", "_at_").replace("+","-"),
             "version": package_version,
             "integrity": integrity,
             "dependencies": {},
