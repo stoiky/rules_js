@@ -7,7 +7,13 @@ def _bazel_name(name, version):
 
 def _versioned_name(name, version):
     "Make a developer-friendly name for a package name and version"
-    return "%s@%s" % (name, version)
+    escaped = _ensure_not_link_version(version)
+    return "%s@%s" % (name, escaped)
+
+def _ensure_not_link_version(version):
+    if "link:.." in version:
+        return "workspace"
+    return version
 
 def _virtual_store_name(name, version):
     "Make a virtual store name for a given package and version"
