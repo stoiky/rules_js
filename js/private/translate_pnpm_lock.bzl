@@ -239,7 +239,7 @@ def _process_lockfile(rctx, lockfile, prod, dev, no_optional):
         # WARNING - Overwrite temporarily integrity 
         #####
         if rctx.name == "npm_deps":
-            local_pnpm_path_to_package = "%s@%s" % (package_name.replace("/", "+"), path_segments[-1])
+            local_pnpm_path_to_package = "%s@%s" % (package.replace("/", "+"), path_segments[-1])
             # eg ./common/temp/node_modules/.pnpm/@adobe-fonts+fontpicker@1.0.1_typescript@4.5.4/node_modules/@adobe-fonts/fontpicker
             integrity = paths.join(
                 _user_workspace_root(rctx), 
@@ -249,7 +249,7 @@ def _process_lockfile(rctx, lockfile, prod, dev, no_optional):
                 ".pnpm", 
                 local_pnpm_path_to_package,
                 "node_modules",
-                package_name)
+                package)
             # print(integrity)
         dev = resolution.get("dev", False)
         optional = resolution.get("optional", False)
