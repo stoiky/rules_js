@@ -148,18 +148,11 @@ def _impl(rctx):
 
     deps = []
     for dep in rctx.attr.deps:
-        scope = ""
-        if dep.startswith("@"):
-            scope = "@"
-            dep = dep[1:]
-        dep_split = dep.partition("@")
-        dep_name = scope + dep_split[0]
-        dep_version = dep_split[2]
-        print("Original: %s%s Name: %s Version: %s" % (scope, dep, dep_name, dep_version))
+        parsed_dep = npm_utils.parse_dependency_string(dep)
         dep_target = "{namespace}__{bazel_name}__ref" if rctx.attr.experimental_reference_deps else "{namespace}__{bazel_name}"
         deps.append(dep_target.format(
             namespace = npm_utils.node_package_target_namespace,
-            bazel_name = npm_utils.bazel_name(dep_name, dep_version),
+            bazel_name = npm_utils.bazel_name(parsed_dep.name, parsed_dep.version),
         ))
 
     node_package_bzl_file = "node_package.bzl"

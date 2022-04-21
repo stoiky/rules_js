@@ -8,15 +8,29 @@ def _bazel_name(name, version):
 
 def _normalize_version(version):
     "Make a bazel friendly version information"
-    sanitized_version = _change_link_relative_path(version)
-    # 21.1.0_rollup@2.70.2 becomes 21.1.0_rollup_2.70.2
-    return sanitized_version.replace("@", "_").replace("+", "_")
 
-def _change_link_relative_path(version):
-    "Remove usages of 'link' protocol"
-    if "link:" in version:
-        return "workspace"
-    return version
+    # 21.1.0_rollup@2.70.2            -> 21.1.0_rollup_2.70.2
+    # 5.4.3_mobx@5.10.1+react@17.0.1  -> 5.4.3_mobx_5.10.1_plus_react_17.0.1
+    return version.replace("@", "_").replace("+", "_plus_")
+
+def _parse_dependency_string(dep):
+    "Parse dependency string"
+
+    # mobx-react-lite@3.3.0_mobx_6.5.0_plus_react_17.0.2
+    #   -> mobx-react-lite, 3.3.0_mobx_6.5.0_plus_react_17.0.2
+    #
+    # @typescript-eslint/parser@4.13.0_eslint_7.12.1_plus_typescript_4.5.4
+    #   -> @typescript-eslint/parser, 4.13.0_eslint_7.12.1_plus_typescript_4.5.4
+    # split = dep.rsplit("@", 1)
+    scope = ""
+    if dep.startswith("@"):
+        scope = "@"
+        dep = dep[1:]
+    dep_split = dep.partition("@")
+    return struct(
+        name = scope + dep_split[0],
+        version = dep_split[2],
+    )
 
 def _strip_peer_dep_version(version):
     "Remove peer dependency syntax from version string"
@@ -40,6 +54,12 @@ def _alias_target_name(name):
     "Make an alias target name for a given package"
     return name.replace("/", "+")
 
+def _change_link_relative_path(version):
+    "Remove usages of 'link' protocol"
+    if "link:" in version:
+        return "workspace"
+    return version
+
 npm_utils = struct(
     bazel_name = _bazel_name,
     versioned_name = _versioned_name,
@@ -48,6 +68,7 @@ npm_utils = struct(
     change_link_relative_path = _change_link_relative_path,
     strip_peer_dep_version = _strip_peer_dep_version,
     normalize_version = _normalize_version,
+    parse_dependency_string = _parse_dependency_string,
     # Prefix namespace to use for generated js_binary targets and aliases
     node_package_target_namespace = "npm",
 )
