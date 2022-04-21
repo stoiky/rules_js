@@ -159,7 +159,7 @@ def _get_direct_dependencies(info, prod, dev, no_optional):
         print("no direct dependencies to translate in lockfile")
 
     for (dep_name, dep_version) in lock_dependencies.items():
-        direct_dependencies.append(npm_utils.versioned_name(dep_name, dep_version))
+        direct_dependencies.append(npm_utils.versioned_name(dep_name, npm_utils.change_link_relative_path(dep_version)))
     return direct_dependencies
 
 def _process_lockfile(rctx, lockfile, prod, dev, no_optional):
@@ -204,8 +204,8 @@ def _process_lockfile(rctx, lockfile, prod, dev, no_optional):
             dependencies = _get_direct_dependencies(importer_info, prod, dev, no_optional) 
             if dependencies:
                 package["dependencies"] = dependencies
+                direct_dependencies = direct_dependencies + dependencies
             packages[npm_utils.versioned_name(project_name, project_version)] = package
-            direct_dependencies = direct_dependencies + dependencies
     else:
         # not yet sure if there is such a scenario
         fail("scenario not covered, exit with error")
@@ -271,8 +271,15 @@ def _process_lockfile(rctx, lockfile, prod, dev, no_optional):
         if dependencies:
             package_info["dependencies"] = dependencies
         packages[npm_utils.versioned_name(package, version)] = package_info
+
+    # TODO
+    all_unique_direct_dependencies = []
+    for dd in direct_dependencies:
+        if dd not in all_unique_direct_dependencies:
+            all_unique_direct_dependencies.append(dd)
+
     return {
-        "dependencies": direct_dependencies,
+        "dependencies": all_unique_direct_dependencies,
         "packages": packages,
     }
 
@@ -350,6 +357,15 @@ def _impl(rctx):
         ),
     ]
 
+    d_text = ""
+    for dd in direct_dependencies:
+        d_text += dd + "\n"
+    rctx.file("direct_deps.bazel", d_text)
+    p_text = ""
+    for p in packages:
+        p_text += p + "\n"
+    rctx.file("packages.bazel", p_text)
+
     for (i, v) in enumerate(packages.items()):
         (versioned_name, package) = v
         name = package.get("name")
@@ -379,6 +395,9 @@ def _impl(rctx):
         repo_name = "%s__%s" % (rctx.name, npm_utils.bazel_name(name, version))
 
         indirect = False if versioned_name in direct_dependencies else True
+
+        if "@hz/" in versioned_name:
+            indirect = False
 
         repositories_bzl.append(_NPM_IMPORT_TMPL.format(
             name = repo_name,

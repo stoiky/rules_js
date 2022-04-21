@@ -8,9 +8,15 @@ def _bazel_name(name, version):
 
 def _normalize_version(version):
     "Make a bazel friendly version information"
-
+    sanitized_version = _change_link_relative_path(version)
     # 21.1.0_rollup@2.70.2 becomes 21.1.0_rollup_2.70.2
-    return version.replace("@", "_")
+    return sanitized_version.replace("@", "_").replace("+", "_")
+
+def _change_link_relative_path(version):
+    "Remove usages of 'link' protocol"
+    if "link:" in version:
+        return "workspace"
+    return version
 
 def _strip_peer_dep_version(version):
     "Remove peer dependency syntax from version string"
@@ -34,16 +40,12 @@ def _alias_target_name(name):
     "Make an alias target name for a given package"
     return name.replace("/", "+")
 
-def _ensure_not_link_version(version):
-    if "link:" in version:
-        return "workspace"
-    return version
-
 npm_utils = struct(
     bazel_name = _bazel_name,
     versioned_name = _versioned_name,
     virtual_store_name = _virtual_store_name,
     alias_target_name = _alias_target_name,
+    change_link_relative_path = _change_link_relative_path,
     strip_peer_dep_version = _strip_peer_dep_version,
     normalize_version = _normalize_version,
     # Prefix namespace to use for generated js_binary targets and aliases

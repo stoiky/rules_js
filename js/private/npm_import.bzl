@@ -148,9 +148,14 @@ def _impl(rctx):
 
     deps = []
     for dep in rctx.attr.deps:
-        dep_split = dep.split("@")
-        dep_name = "@".join(dep_split[:-1])
-        dep_version = dep_split[-1]
+        scope = ""
+        if dep.startswith("@"):
+            scope = "@"
+            dep = dep[1:]
+        dep_split = dep.partition("@")
+        dep_name = scope + dep_split[0]
+        dep_version = dep_split[2]
+        print("Original: %s%s Name: %s Version: %s" % (scope, dep, dep_name, dep_version))
         dep_target = "{namespace}__{bazel_name}__ref" if rctx.attr.experimental_reference_deps else "{namespace}__{bazel_name}"
         deps.append(dep_target.format(
             namespace = npm_utils.node_package_target_namespace,
@@ -177,7 +182,7 @@ def _impl(rctx):
     )]
 
     # Add an namespace if this is a direct dependency
-    if not rctx.attr.indirect:
+    if not rctx.attr.indirect and "@hz/" in rctx.attr.package:
         node_package_bzl.append(_ALIAS_TMPL.format(
             alias = npm_utils.alias_target_name(rctx.attr.package),
             namespace = npm_utils.node_package_target_namespace,
