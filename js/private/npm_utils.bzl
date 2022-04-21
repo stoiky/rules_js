@@ -2,23 +2,28 @@
 
 def _bazel_name(name, version):
     "Make a bazel friendly name from a package name and a version that can be used in repository and target names"
-    escaped_name = name.replace("/", "_").replace("@", "at_")
-    # print(escaped_name)
-    escaped_version = _ensure_not_peer_version(version)
-    return "%s_%s" % (escaped_name, escaped_version)
+    escaped = name.replace("/", "_").replace("@", "at_")
+    version_escaped = _normalize_version(version)
+    return "%s_%s" % (escaped, version_escaped)
+
+def _normalize_version(version):
+    "Make a bazel friendly version information"
+
+    # 21.1.0_rollup@2.70.2 becomes 21.1.0_rollup_2.70.2
+    return version.replace("@", "_")
+
+def _strip_peer_dep_version(version):
+    "Remove peer dependency syntax from version string"
+
+    # 21.1.0_rollup@2.70.2 becomes 21.1.0
+    index = version.find("_")
+    if index != -1:
+        return version[:index]
+    return version
 
 def _versioned_name(name, version):
     "Make a developer-friendly name for a package name and version"
-    escaped = _ensure_not_link_version(version)
-    return "%s@%s" % (name, _ensure_not_peer_version(escaped))
-
-def _ensure_not_peer_version(version):
-    return version.split("_")[0]
-
-def _ensure_not_link_version(version):
-    if "link:.." in version:
-        return "workspace"
-    return version
+    return "%s@%s" % (name, version)
 
 def _virtual_store_name(name, version):
     "Make a virtual store name for a given package and version"
@@ -29,12 +34,18 @@ def _alias_target_name(name):
     "Make an alias target name for a given package"
     return name.replace("/", "+")
 
+def _ensure_not_link_version(version):
+    if "link:.." in version:
+        return "workspace"
+    return version
+
 npm_utils = struct(
     bazel_name = _bazel_name,
     versioned_name = _versioned_name,
     virtual_store_name = _virtual_store_name,
     alias_target_name = _alias_target_name,
-    ensure_not_peer_version = _ensure_not_peer_version,
-    # Prefix namespace to use for generated nodejs_binary targets and aliases
-    nodejs_package_target_namespace = "npm",
+    strip_peer_dep_version = _strip_peer_dep_version,
+    normalize_version = _normalize_version,
+    # Prefix namespace to use for generated js_binary targets and aliases
+    node_package_target_namespace = "npm",
 )

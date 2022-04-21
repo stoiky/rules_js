@@ -8,21 +8,21 @@ exports_files(
 )
 
 bzl_library(
-    name = "nodejs_binary",
-    srcs = ["nodejs_binary.bzl"],
+    name = "js_binary",
+    srcs = ["js_binary.bzl"],
     visibility = ["//visibility:public"],
-    deps = ["//js/private:nodejs_binary"],
+    deps = ["//js/private:js_binary"],
 )
 
 bzl_library(
-    name = "nodejs_test",
+    name = "js_test",
     visibility = ["//visibility:public"],
-    deps = ["//js/private:nodejs_binary"],
+    deps = ["//js/private:js_binary"],
 )
 
 bzl_library(
-    name = "nodejs_package",
-    srcs = ["nodejs_package.bzl"],
+    name = "node_package",
+    srcs = ["node_package.bzl"],
     visibility = ["//visibility:public"],
     deps = [
         "@bazel_skylib//lib:paths",
@@ -47,6 +47,7 @@ bzl_library(
     deps = [
         "//js/private:npm_import",
         "//js/private:npm_utils",
+<<<<<<< HEAD
     ],
 )
 
@@ -55,17 +56,28 @@ bzl_library(
     srcs = ["translate_pnpm_lock.bzl"],
     visibility = ["//visibility:public"],
     deps = [
+=======
+>>>>>>> symlinked_node_modules_structure
         "//js/private:translate_pnpm_lock",
     ],
 )
 
 bzl_library(
+<<<<<<< HEAD
     name = "run_nodejs_binary",
     srcs = ["run_nodejs_binary.bzl"],
     visibility = ["//visibility:public"],
     deps = [
         "@aspect_bazel_lib//lib:run_binary",
         "@aspect_bazel_lib//lib:copy_to_bin",
+=======
+    name = "run_js_binary",
+    srcs = ["run_js_binary.bzl"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@aspect_bazel_lib//lib:copy_to_bin",
+        "@aspect_bazel_lib//lib:run_binary",
+>>>>>>> symlinked_node_modules_structure
         "@bazel_skylib//lib:dicts",
     ],
 )

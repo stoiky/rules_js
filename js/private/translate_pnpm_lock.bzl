@@ -62,7 +62,7 @@ In BUILD files, declare dependencies on the packages using the same external rep
 Following the same example, this might look like:
 
 ```starlark
-nodejs_test(
+js_test(
     name = "test_test",
     data = ["@npm_deps//@types/node"],
     entry_point = "test.js",
@@ -225,16 +225,15 @@ def _process_lockfile(rctx, lockfile, prod, dev, no_optional):
         if len(path_segments) != 2 and len(path_segments) != 3:
             msg = "unsupported package path %s" % packagePath
             fail(msg)
-        package_name = packagePath[1:].rpartition("/")[0]
-        # package_version = path_segments[-1].replace("@", "_at_").replace("+","-")
-        package_version = packagePath.rpartition("/")[2].split("_")[0]
+        package = "/".join(path_segments[0:-1])
+        version = path_segments[-1]
         resolution = packageSnapshot.get("resolution")
         if not resolution:
             msg = "package %s has no resolution field" % packagePath
             fail(msg)
         integrity = resolution.get("integrity")
         if not integrity:
-            msg = "package %s resolution has no integrity field" % packagePath
+            msg = "package %s resolution has no itegrity field" % packagePath
             fail(msg)
         #####
         # WARNING - Overwrite temporarily integrity 
@@ -252,14 +251,13 @@ def _process_lockfile(rctx, lockfile, prod, dev, no_optional):
                 "node_modules",
                 package_name)
             # print(integrity)
-
         dev = resolution.get("dev", False)
         optional = resolution.get("optional", False)
         has_bin = resolution.get("hasBin", False)
         requires_build = resolution.get("requiresBuild", False)
-        package = {
-            "name": package_name,
-            "version": package_version.replace("@", "_at_").replace("+", "-"),
+        package_info = {
+            "name": package,
+            "version": version,
             "integrity": integrity,
             "dependencies": {},
             "dev": dev,
@@ -271,11 +269,11 @@ def _process_lockfile(rctx, lockfile, prod, dev, no_optional):
         package_deps = packageSnapshot.get("dependencies")
         if package_deps:
             for (dep_name, dep_version) in package_deps.items():
-                dependencies.append(npm_utils.versioned_name(dep_name, dep_version))
+                normalized_version = npm_utils.normalize_version(dep_version)
+                dependencies.append(npm_utils.versioned_name(dep_name, normalized_version))
         if dependencies:
-            package["dependencies"] = dependencies
-        packages[npm_utils.versioned_name(package_name, package_version)] = package
-
+            package_info["dependencies"] = dependencies
+        packages[npm_utils.versioned_name(package, version)] = package_info
     return {
         "dependencies": direct_dependencies,
         "packages": packages,
@@ -286,8 +284,8 @@ _NPM_IMPORT_TMPL = \
         name = "{name}",
         integrity = "{integrity}",
         link_package_guard = "{link_package_guard}",
-        package_name = "{package_name}",
-        package_version = "{package_version}",{maybe_deps}{maybe_indirect}{maybe_patches}{maybe_patch_args}
+        package = "{package}",
+        version = "{version}",{maybe_deps}{maybe_indirect}{maybe_patches}{maybe_patch_args}
     )
 """
 
@@ -343,15 +341,15 @@ def _impl(rctx):
         "def npm_repositories():",
     ]
 
-    nodejs_packages_bzl_file = "nodejs_packages.bzl"
-    nodejs_packages_header_bzl = []
-    nodejs_packages_bzl = [
-        """def nodejs_packages():
+    node_modules_bzl_file = "node_modules.bzl"
+    node_modules_header_bzl = []
+    node_modules_bzl = [
+        """def node_modules():
     if "{link_package_guard}" != "." and native.package_name() != "{link_package_guard}":
-        fail("The nodejs_packages() macro loaded from {nodejs_packages_bzl} may only be called in the '{link_package_guard}' package. Move the call to the '{link_package_guard}' package BUILD file.")        
+        fail("The node_modules() macro loaded from {node_modules_bzl} may only be called in the '{link_package_guard}' package. Move the call to the '{link_package_guard}' package BUILD file.")        
 """.format(
             link_package_guard = link_package,
-            nodejs_packages_bzl = "@%s//:%s" % (rctx.name, nodejs_packages_bzl_file),
+            node_modules_bzl = "@%s//:%s" % (rctx.name, node_modules_bzl_file),
         ),
     ]
 
@@ -388,8 +386,8 @@ def _impl(rctx):
         repositories_bzl.append(_NPM_IMPORT_TMPL.format(
             name = repo_name,
             link_package_guard = link_package,
-            package_name = name,
-            package_version = version,
+            package = name,
+            version = version,
             integrity = package.get("integrity"),
             maybe_indirect = """
         indirect = True,""" if indirect else "",
@@ -401,13 +399,13 @@ def _impl(rctx):
         patch_args = %s,""" % patch_args) if len(patches) > 0 and len(patch_args) > 0 else "",
         ))
 
-        nodejs_packages_header_bzl.append(
-            """load("@{repo_name}//:nodejs_package.bzl", nodejs_package_{i} = "nodejs_package")""".format(
+        node_modules_header_bzl.append(
+            """load("@{repo_name}//:node_package.bzl", node_package_{i} = "node_package")""".format(
                 i = i,
                 repo_name = repo_name,
             ),
         )
-        nodejs_packages_bzl.append("    nodejs_package_{i}()".format(i = i))
+        node_modules_bzl.append("    node_package_{i}()".format(i = i))
 
         if not indirect:
             # For direct dependencies create alias targets @repo_name//name, @repo_name//@scope/name,
@@ -419,15 +417,15 @@ def _impl(rctx):
 
     package_bzl = [_PACKAGE_TMPL.format(
         workspace = rctx.attr.pnpm_lock.workspace_name,
-        namespace = npm_utils.nodejs_package_target_namespace,
+        namespace = npm_utils.node_package_target_namespace,
         link_package = link_package,
     )]
 
-    generated_by_line = ["# @generated by translate_pnpm_lock.bzl from {pnpm_lock}\"".format(pnpm_lock = str(rctx.attr.pnpm_lock))]
+    generated_by_line = ["\"@generated by translate_pnpm_lock.bzl from {pnpm_lock}\"".format(pnpm_lock = str(rctx.attr.pnpm_lock))]
     empty_line = [""]
 
-    rctx.file("repositories.bzl", "\n".join(generated_by_line + repositories_bzl))
-    rctx.file(nodejs_packages_bzl_file, "\n".join(generated_by_line + nodejs_packages_header_bzl + empty_line + nodejs_packages_bzl + empty_line))
+    rctx.file("repositories.bzl", "\n".join(generated_by_line + empty_line + repositories_bzl))
+    rctx.file(node_modules_bzl_file, "\n".join(generated_by_line + node_modules_header_bzl + empty_line + node_modules_bzl + empty_line))
     rctx.file("package.bzl", "\n".join(generated_by_line + package_bzl))
     rctx.file("BUILD.bazel", "exports_files([\"repositories.bzl\"])")
 

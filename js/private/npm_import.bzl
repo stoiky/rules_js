@@ -18,8 +18,8 @@ or some `.bzl` file loaded from it. For example, with this code in `WORKSPACE`:
 ```starlark
 npm_import(
     name = "npm__types_node-15.2.2",
-    package_name = "@types/node",
-    package_version = "15.12.2",
+    package = "@types/node",
+    version = "15.12.2",
     integrity = "sha512-zjQ69G564OCIWIOHSXyQEEDpdpGl+G348RAKY0XXy9Z5kU9Vzv1GMNnkar/ZJ8dzXB3COzD9Mo9NtRZ4xfgUww==",
 )
 ```
@@ -37,25 +37,25 @@ To consume the downloaded package in rules, it must be "linked" into the link pa
 package's `BUILD.bazel` file:
 
 ```
-load("@npm__types_node-15.2.2//:nodejs_package.bzl", nodejs_package_types_node = "nodejs_package")
+load("@npm__types_node-15.2.2//:node_package.bzl", node_package_types_node = "node_package")
 
-nodejs_package_types_node()
+node_package_types_node()
 ```
 
-The instantiates an `nodejs_binary` target for this package that can be referenced by the alias
+The instantiates an `js_binary` target for this package that can be referenced by the alias
 `@//link/package:npm__name` and `@//link/package:npm__@scope+name` for scoped packages.
 The `npm` prefix of these alias is configurable via the `namespace` attribute.
 
 When using `translate_pnpm_lock`, you can `link` all the npm dependencies in the lock files with:
 
 ```
-load("@npm//:nodejs_packages.bzl", "nodejs_packages")
+load("@npm//:node_modules.bzl", "node_modules")
 
-nodejs_packages()
+node_modules()
 ```
 
 `translate_pnpm_lock` also creates convienence aliases in the external repository that reference
-the linked `nodejs_package` targets. For example, `@npm//name` and `@npm//@scope/name`.
+the linked `node_package` targets. For example, `@npm//name` and `@npm//@scope/name`.
 
 To change the proxy URL we use to fetch, configure the Bazel downloader:
 
@@ -77,29 +77,29 @@ def is_windows_os(rctx):
 
 # TODO: handle npm packages with lifecycle hooks; src will be the output of the postinstall rule instead
 _NODEJS_PACKAGE_TMPL = \
-"""def nodejs_package():
+    """def node_package():
     if "{link_package_guard}" != "." and native.package_name() != "{link_package_guard}":
-        fail("The nodejs_package() macro loaded from {nodejs_package_bzl} may only be called in the '{link_package_guard}' package. Move the call to the '{link_package_guard}' package BUILD file.")
+        fail("The node_package() macro loaded from {node_package_bzl} may only be called in the '{link_package_guard}' package. Move the call to the '{link_package_guard}' package BUILD file.")
 
-    _nodejs_package(
+    _node_package(
         name = "{namespace}__{bazel_name}",
         src = "@{rctx_name}//:{dir}",
-        package_name = "{package_name}",
-        package_version = "{package_version}",
+        package = "{package}",
+        version = "{version}",
         visibility = ["//visibility:public"],{maybe_indirect}{maybe_deps}
     )
 """
 
 _NODEJS_PACKAGE_EXPERIMENTAL_REF_DEPS_TMPL = _NODEJS_PACKAGE_TMPL + \
-"""    _nodejs_package(
+                                             """   _node_package(
         name = "{namespace}__{bazel_name}__ref",
-        package_name = "{package_name}",
-        package_version = "{package_version}",{maybe_indirect}
+        package = "{package}",
+        version = "{version}",{maybe_indirect}
     )
 """
 
 _ALIAS_TMPL = \
-"""    native.alias(
+    """    native.alias(
         name = "{namespace}__{alias}",
         actual = ":{namespace}__{bazel_name}",
         visibility = ["//visibility:public"],
@@ -122,12 +122,10 @@ def _impl(rctx):
         rctx.download(
             output = tarball,
             url = "https://registry.npmjs.org/{0}/-/{1}-{2}.tgz".format(
-                rctx.attr.package_name,
+                rctx.attr.package,
                 # scoped packages contain a slash in the name, which doesn't appear in the later part of the URL
-                rctx.attr.package_name.split("/")[-1],
-                # packages with peer dependencies have a suffix after the version
-                # e.g. 1.3.0_react_at_17.0.2
-                rctx.attr.package_version.split("_")[0],
+                rctx.attr.package.split("/")[-1],
+                npm_utils.strip_peer_dep_version(rctx.attr.version),
             ),
             integrity = rctx.attr.integrity,
         )
@@ -155,22 +153,22 @@ def _impl(rctx):
         dep_version = dep_split[-1]
         dep_target = "{namespace}__{bazel_name}__ref" if rctx.attr.experimental_reference_deps else "{namespace}__{bazel_name}"
         deps.append(dep_target.format(
-            namespace = npm_utils.nodejs_package_target_namespace,
-            bazel_name = npm_utils.bazel_name(dep_name, dep_version)
+            namespace = npm_utils.node_package_target_namespace,
+            bazel_name = npm_utils.bazel_name(dep_name, dep_version),
         ))
 
-    nodejs_package_bzl_file = "nodejs_package.bzl"
+    node_package_bzl_file = "node_package.bzl"
 
-    bazel_name = npm_utils.bazel_name(rctx.attr.package_name, rctx.attr.package_version)
-    nodejs_package_tmpl = _NODEJS_PACKAGE_EXPERIMENTAL_REF_DEPS_TMPL if rctx.attr.experimental_reference_deps else _NODEJS_PACKAGE_TMPL
-    nodejs_package_bzl = [nodejs_package_tmpl.format(
-        namespace = npm_utils.nodejs_package_target_namespace,
+    bazel_name = npm_utils.bazel_name(rctx.attr.package, rctx.attr.version)
+    node_package_tmpl = _NODEJS_PACKAGE_EXPERIMENTAL_REF_DEPS_TMPL if rctx.attr.experimental_reference_deps else _NODEJS_PACKAGE_TMPL
+    node_package_bzl = [node_package_tmpl.format(
+        namespace = npm_utils.node_package_target_namespace,
         dir = dirname,
         link_package_guard = rctx.attr.link_package_guard,
-        package_name = rctx.attr.package_name,
-        package_version = npm_utils.ensure_not_peer_version(rctx.attr.package_version),
+        package = rctx.attr.package,
+        version = rctx.attr.version,
         rctx_name = rctx.name,
-        nodejs_package_bzl = "@%s//:%s" % (rctx.name, nodejs_package_bzl_file),
+        node_package_bzl = "@%s//:%s" % (rctx.name, node_package_bzl_file),
         bazel_name = bazel_name,
         maybe_indirect = """
         indirect = True,""" if rctx.attr.indirect else "",
@@ -180,18 +178,18 @@ def _impl(rctx):
 
     # Add an namespace if this is a direct dependency
     if not rctx.attr.indirect:
-        nodejs_package_bzl.append(_ALIAS_TMPL.format(
-            alias = npm_utils.alias_target_name(rctx.attr.package_name),
-            namespace = npm_utils.nodejs_package_target_namespace,
+        node_package_bzl.append(_ALIAS_TMPL.format(
+            alias = npm_utils.alias_target_name(rctx.attr.package),
+            namespace = npm_utils.node_package_target_namespace,
             bazel_name = bazel_name,
         ))
 
     bzl_header = [
         "# @generated by npm_import.bzl",
-        """load("@aspect_rules_js//js:nodejs_package.bzl", _nodejs_package = "nodejs_package")""",
+        """load("@aspect_rules_js//js:node_package.bzl", _node_package = "node_package")""",
         "",
     ]
-    rctx.file(nodejs_package_bzl_file, "\n".join(bzl_header + nodejs_package_bzl))
+    rctx.file(node_package_bzl_file, "\n".join(bzl_header + node_package_bzl))
 
     # Apply patches to the extracted package
     patch(rctx, patch_args = rctx.attr.patch_args, patch_directory = dirname)
@@ -208,13 +206,13 @@ _ATTRS = {
 
         It is a security risk to omit the checksum as remote files can change.
         At best omitting this field will make your build non-hermetic.
-        It is optional to make development easier but should be set before shipping."""
+        It is optional to make development easier but should be set before shipping.""",
     ),
-    "package_name": attr.string(
+    "package": attr.string(
         doc = """Name of the npm package, such as `acorn` or `@types/node`""",
         mandatory = True,
     ),
-    "package_version": attr.string(
+    "version": attr.string(
         doc = """Version of the npm package, such as `8.4.0`""",
         mandatory = True,
     ),
@@ -230,21 +228,21 @@ _ATTRS = {
         doc = """If True, this is a indirect npm dependency which will not be linked as a top-level node_module.""",
     ),
     "link_package_guard": attr.string(
-        doc = """When explictly set, check that the generated nodejs_package() marcro
+        doc = """When explictly set, check that the generated node_package() marcro
         in package.bzl is called within the specified package.
 
         Default value of "." implies no gaurd.
 
         This is set by automatically when using translate_pnpm_lock via npm_import
-        to guard against linking the generated nodejs_packages into the wrong
+        to guard against linking the generated node_modules into the wrong
         location.""",
         default = ".",
     ),
     "experimental_reference_deps": attr.bool(
         doc = """Experimental reference deps allow dep to support circular deps between npm packages.
         This feature depends on dangling symlinks, however, which is still experimental in bazel,
-        has issues with "host" and "exec" configurations, and does not yet work with remote exection."""
-    ), 
+        has issues with "host" and "exec" configurations, and does not yet work with remote exection.""",
+    ),
 }
 
 npm_import = struct(

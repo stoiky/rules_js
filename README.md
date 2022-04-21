@@ -7,7 +7,8 @@ Our goal is to eventually have rough feature parity with rules_nodejs "builtin",
 This ruleset is a high-performance alternative to rules_nodejs.
 
 The primary difference is that we don't run `npm install` or `yarn install`, instead
-we use a Bazel-idiomatic approach to managing the third-party dependencies.
+we use a Bazel-idiomatic approach to managing the third-party dependencies adapted from
+[pnpm](https://pnpm.io/), similar to how [Rush](https://rushjs.io/) manages packages.
 
 Features include:
 
@@ -24,7 +25,7 @@ In addition, as a clean rewrite many of the bugs in rules_nodejs are naturally r
 
 -   Drop four years of accumulated complexity.
 -   No Bash dependency on Windows, [#1102](https://github.com/bazelbuild/rules_nodejs/issues/1102)
--   nodejs_binary can be used as the `tool` in a genrule [#1553](https://github.com/bazelbuild/rules_nodejs/issues/1553), [#2600](https://github.com/bazelbuild/rules_nodejs/issues/2600)
+-   js_binary can be used as the `tool` in a genrule [#1553](https://github.com/bazelbuild/rules_nodejs/issues/1553), [#2600](https://github.com/bazelbuild/rules_nodejs/issues/2600)
 -   Repository layout matches the distribution so you can trivially patch or point to sources.
 -   We use gazelle to generate bzl_library targets so users can always generate documentation
     for rules that reference these. [#2874](https://github.com/bazelbuild/rules_nodejs/issues/2874)
