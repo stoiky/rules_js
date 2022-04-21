@@ -47,37 +47,11 @@ bzl_library(
     deps = [
         "//js/private:npm_import",
         "//js/private:npm_utils",
-<<<<<<< HEAD
-    ],
-)
-
-bzl_library(
-    name = "translate_pnpm_lock",
-    srcs = ["translate_pnpm_lock.bzl"],
-    visibility = ["//visibility:public"],
-    deps = [
-=======
->>>>>>> symlinked_node_modules_structure
         "//js/private:translate_pnpm_lock",
     ],
 )
 
 bzl_library(
-<<<<<<< HEAD
-    name = "run_nodejs_binary",
-    srcs = ["run_nodejs_binary.bzl"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "@aspect_bazel_lib//lib:run_binary",
-        "@aspect_bazel_lib//lib:copy_to_bin",
-=======
     name = "run_js_binary",
     srcs = ["run_js_binary.bzl"],
     visibility = ["//visibility:public"],
-    deps = [
-        "@aspect_bazel_lib//lib:copy_to_bin",
-        "@aspect_bazel_lib//lib:run_binary",
->>>>>>> symlinked_node_modules_structure
-        "@bazel_skylib//lib:dicts",
-    ],
-)

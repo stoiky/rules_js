@@ -1,11 +1,6 @@
 "wrapper macro for js_binary rule"
 
-<<<<<<< HEAD:js/nodejs_binary.bzl
-load("//js/private:nodejs_binary.bzl", _lib = "nodejs_binary_lib")
-load("@bazel_skylib//lib:dicts.bzl", "dicts")
-=======
 load("//js/private:js_binary.bzl", _lib = "js_binary_lib")
->>>>>>> symlinked_node_modules_structure:js/js_binary.bzl
 
 _js_binary = rule(
     implementation = _lib.js_binary_impl,
