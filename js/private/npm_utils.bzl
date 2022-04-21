@@ -35,7 +35,7 @@ def _alias_target_name(name):
     return name.replace("/", "+")
 
 def _ensure_not_link_version(version):
-    if "link:.." in version:
+    if "link:" in version:
         return "workspace"
     return version
 

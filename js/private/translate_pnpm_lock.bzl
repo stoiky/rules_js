@@ -159,9 +159,6 @@ def _get_direct_dependencies(info, prod, dev, no_optional):
         print("no direct dependencies to translate in lockfile")
 
     for (dep_name, dep_version) in lock_dependencies.items():
-        if "_" in dep_version:
-            dep_version = dep_version.split("_")[0]
-            # print("%s -> %s" % (dep_version, dep_version.split("_")[0]))
         direct_dependencies.append(npm_utils.versioned_name(dep_name, dep_version))
     return direct_dependencies
 
