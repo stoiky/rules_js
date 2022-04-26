@@ -21,10 +21,15 @@ def _parse_dependency_string(dep):
     #
     # @typescript-eslint/parser@4.13.0_eslint_7.12.1_plus_typescript_4.5.4
     #   -> @typescript-eslint/parser, 4.13.0_eslint_7.12.1_plus_typescript_4.5.4
-    split = dep.rsplit("@", 1)
+    # split = dep.rsplit("@", 1)
+    scope = ""
+    if dep.startswith("@"):
+        scope = "@"
+        dep = dep[1:]
+    dep_split = dep.partition("@")
     return struct(
-        name = split[0],
-        version = split[1],
+        name = scope + dep_split[0],
+        version = dep_split[2],
     )
 
 def _strip_peer_dep_version(version):
@@ -49,11 +54,18 @@ def _alias_target_name(name):
     "Make an alias target name for a given package"
     return name.replace("/", "+")
 
+def _change_link_relative_path(version):
+    "Remove usages of 'link' protocol"
+    if "link:" in version:
+        return "workspace"
+    return version
+
 npm_utils = struct(
     bazel_name = _bazel_name,
     versioned_name = _versioned_name,
     virtual_store_name = _virtual_store_name,
     alias_target_name = _alias_target_name,
+    change_link_relative_path = _change_link_relative_path,
     strip_peer_dep_version = _strip_peer_dep_version,
     normalize_version = _normalize_version,
     parse_dependency_string = _parse_dependency_string,

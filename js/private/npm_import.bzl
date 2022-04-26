@@ -113,32 +113,36 @@ _ALIAS_TMPL = \
 """
 
 def _impl(rctx):
-    tarball = "package.tgz"
-    rctx.download(
-        output = tarball,
-        url = "https://registry.npmjs.org/{0}/-/{1}-{2}.tgz".format(
-            rctx.attr.package,
-            # scoped packages contain a slash in the name, which doesn't appear in the later part of the URL
-            rctx.attr.package.split("/")[-1],
-            npm_utils.strip_peer_dep_version(rctx.attr.version),
-        ),
-        integrity = rctx.attr.integrity,
-    )
-
     dirname = "package"
-    mkdir_args = ["mkdir", "-p", dirname] if not is_windows_os(rctx) else ["cmd", "/c", "if not exist {dir} (mkdir {dir})".format(dir = dirname.replace("/", "\\"))]
-    result = rctx.execute(mkdir_args)
-    if result.return_code:
-        msg = "mkdir %s failed: \nSTDOUT:\n%s\nSTDERR:\n%s" % (dirname, result.stdout, result.stderr)
-        fail(msg)
+    # something quick to keep the old package download in
+    if "/Users/" in rctx.attr.integrity:
+        rctx.symlink(rctx.attr.integrity, dirname)
+    else:
+        tarball = "package.tgz"
+        rctx.download(
+            output = tarball,
+            url = "https://registry.npmjs.org/{0}/-/{1}-{2}.tgz".format(
+                rctx.attr.package,
+                # scoped packages contain a slash in the name, which doesn't appear in the later part of the URL
+                rctx.attr.package.split("/")[-1],
+                npm_utils.strip_peer_dep_version(rctx.attr.version),
+            ),
+            integrity = rctx.attr.integrity,
+        )
 
-    # npm packages are always published with one top-level directory inside the tarball, tho the name is not predictable
-    # so we use tar here which takes a --strip-components N argument instead of rctx.download_and_extract
-    untar_args = ["tar", "-xf", tarball, "--strip-components", str(1), "-C", dirname]
-    result = rctx.execute(untar_args)
-    if result.return_code:
-        msg = "tar %s failed: \nSTDOUT:\n%s\nSTDERR:\n%s" % (dirname, result.stdout, result.stderr)
-        fail(msg)
+        mkdir_args = ["mkdir", "-p", dirname] if not is_windows_os(rctx) else ["cmd", "/c", "if not exist {dir} (mkdir {dir})".format(dir = dirname.replace("/", "\\"))]
+        result = rctx.execute(mkdir_args)
+        if result.return_code:
+            msg = "mkdir %s failed: \nSTDOUT:\n%s\nSTDERR:\n%s" % (dirname, result.stdout, result.stderr)
+            fail(msg)
+
+        # npm packages are always published with one top-level directory inside the tarball, tho the name is not predictable
+        # so we use tar here which takes a --strip-components N argument instead of rctx.download_and_extract
+        untar_args = ["tar", "-xf", tarball, "--strip-components", str(1), "-C", dirname]
+        result = rctx.execute(untar_args)
+        if result.return_code:
+            msg = "tar %s failed: \nSTDOUT:\n%s\nSTDERR:\n%s" % (dirname, result.stdout, result.stderr)
+            fail(msg)
 
     rctx.file("BUILD.bazel", "exports_files([\"{dir}\"])".format(dir = dirname))
 
@@ -171,7 +175,7 @@ def _impl(rctx):
     )]
 
     # Add an namespace if this is a direct dependency
-    if not rctx.attr.indirect:
+    if not rctx.attr.indirect and "@hz/" in rctx.attr.package:
         node_package_bzl.append(_ALIAS_TMPL.format(
             alias = npm_utils.alias_target_name(rctx.attr.package),
             namespace = npm_utils.node_package_target_namespace,

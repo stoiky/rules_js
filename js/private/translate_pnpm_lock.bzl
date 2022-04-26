@@ -128,7 +128,41 @@ _ATTRS = {
     ),
 }
 
-def _process_lockfile(lockfile, prod, dev, no_optional):
+def _user_workspace_root(repository_ctx):
+    pnpm_lock = repository_ctx.attr.pnpm_lock
+    segments = []
+    if pnpm_lock.package:
+        segments.extend(pnpm_lock.package.split("/"))
+    segments.extend(pnpm_lock.name.split("/"))
+    segments.pop()
+    user_workspace_root = repository_ctx.path(pnpm_lock).dirname
+    for i in segments:
+        user_workspace_root = user_workspace_root.dirname
+    return str(user_workspace_root)
+
+def _get_local_package(repository_ctx, project_path):
+    keys_to_extract = ["name", "version"]
+    path = paths.join(_user_workspace_root(repository_ctx), project_path, "package.json")
+    package_json = json.decode(repository_ctx.read(path))
+    return {key: package_json[key] for key in keys_to_extract}
+
+def _get_direct_dependencies(info, prod, dev, no_optional):
+    direct_dependencies = []
+    lock_dependencies = {}
+    if not prod:
+        lock_dependencies = dicts.add(lock_dependencies, info.get("devDependencies", {}))
+    if not dev:
+        lock_dependencies = dicts.add(lock_dependencies, info.get("dependencies", {}))
+    if not no_optional:
+        lock_dependencies = dicts.add(lock_dependencies, info.get("optionalDependencies", {}))
+    if not lock_dependencies:
+        print("no direct dependencies to translate in lockfile")
+
+    for (dep_name, dep_version) in lock_dependencies.items():
+        direct_dependencies.append(npm_utils.versioned_name(dep_name, npm_utils.change_link_relative_path(dep_version)))
+    return direct_dependencies
+
+def _process_lockfile(rctx, lockfile, prod, dev, no_optional):
     lock_version = lockfile.get("lockfileVersion")
     if not lock_version:
         fail("unknown lockfile version")
@@ -139,25 +173,46 @@ def _process_lockfile(lockfile, prod, dev, no_optional):
         msg = "translate_pnpm_lock only works with pnpm lockfile version 5.3, found %s" % lock_version
         fail(msg)
 
-    lock_dependencies = {}
-    if not prod:
-        lock_dependencies = dicts.add(lock_dependencies, lockfile.get("devDependencies", {}))
-    if not dev:
-        lock_dependencies = dicts.add(lock_dependencies, lockfile.get("dependencies", {}))
-    if not no_optional:
-        lock_dependencies = dicts.add(lock_dependencies, lockfile.get("optionalDependencies", {}))
-    if not lock_dependencies:
-        fail("no direct dependencies to translate in lockfile")
-
+    packages = {}
     direct_dependencies = []
-    for (dep_name, dep_version) in lock_dependencies.items():
-        direct_dependencies.append(npm_utils.versioned_name(dep_name, dep_version))
+    # If there's one single project in the lockfile
+    # we will find 'specifiers' there along 'dependencies' etc
+    if "specifiers" in lockfile:
+        direct_dependencies = _get_direct_dependencies(lockfile, prod, dev, no_optional)
+    # If there are multiple projects in the lockfile
+    # they will be under the 'importers' key
+    elif "importers" in lockfile:
+        lock_importers = lockfile.get("importers")
+        for (importer_name, importer_info) in lock_importers.items():
+            # Root level project, if there is none, this should be skipped
+            if (importer_name == "." and len(importer_info["specifiers"]) == 0):
+                continue
+            project_path = importer_name.removeprefix("../../") # get this programatically
+            project_package = _get_local_package(rctx, project_path)
+            project_name = project_package["name"]
+            project_version = "workspace" # temporary
+            package = {
+                "name": project_name,
+                "version": project_version,
+                "integrity": paths.join(_user_workspace_root(rctx), project_path),
+                "dependencies": {},
+                "dev": False,
+                "optional": False,
+                "has_bin": False, # TODO: check if the package has bin key should be enough
+                "requires_build": False,
+            }
+            dependencies = _get_direct_dependencies(importer_info, prod, dev, no_optional) 
+            if dependencies:
+                package["dependencies"] = dependencies
+                direct_dependencies = direct_dependencies + dependencies
+            packages[npm_utils.versioned_name(project_name, project_version)] = package
+    else:
+        # not yet sure if there is such a scenario
+        fail("scenario not covered, exit with error")
 
     lock_packages = lockfile.get("packages")
     if not lock_packages:
         fail("no packages in lockfile")
-
-    packages = {}
 
     for (packagePath, packageSnapshot) in lock_packages.items():
         if not packagePath.startswith("/"):
@@ -177,6 +232,22 @@ def _process_lockfile(lockfile, prod, dev, no_optional):
         if not integrity:
             msg = "package %s resolution has no itegrity field" % packagePath
             fail(msg)
+        #####
+        # WARNING - Overwrite temporarily integrity 
+        #####
+        if rctx.name == "npm_deps":
+            local_pnpm_path_to_package = "%s@%s" % (package.replace("/", "+"), path_segments[-1])
+            # eg ./common/temp/node_modules/.pnpm/@adobe-fonts+fontpicker@1.0.1_typescript@4.5.4/node_modules/@adobe-fonts/fontpicker
+            integrity = paths.join(
+                _user_workspace_root(rctx), 
+                "common", 
+                "temp", 
+                "node_modules", 
+                ".pnpm", 
+                local_pnpm_path_to_package,
+                "node_modules",
+                package)
+            # print(integrity)
         dev = resolution.get("dev", False)
         optional = resolution.get("optional", False)
         has_bin = resolution.get("hasBin", False)
@@ -200,8 +271,15 @@ def _process_lockfile(lockfile, prod, dev, no_optional):
         if dependencies:
             package_info["dependencies"] = dependencies
         packages[npm_utils.versioned_name(package, version)] = package_info
+
+    # TODO
+    all_unique_direct_dependencies = []
+    for dd in direct_dependencies:
+        if dd not in all_unique_direct_dependencies:
+            all_unique_direct_dependencies.append(dd)
+
     return {
-        "dependencies": direct_dependencies,
+        "dependencies": all_unique_direct_dependencies,
         "packages": packages,
     }
 
@@ -246,6 +324,7 @@ def _impl(rctx):
         fail("prod and dev attributes cannot both be set to true")
 
     lockfile = _process_lockfile(
+        rctx = rctx,
         lockfile = json.decode(rctx.read(rctx.attr.pnpm_lock)),
         prod = rctx.attr.prod,
         dev = rctx.attr.dev,
@@ -257,6 +336,7 @@ def _impl(rctx):
         link_package = rctx.attr.pnpm_lock.package
 
     direct_dependencies = lockfile.get("dependencies")
+    print("Direct deps (%s)" % len(direct_dependencies))
     packages = lockfile.get("packages")
 
     repositories_bzl = [
@@ -276,6 +356,15 @@ def _impl(rctx):
             node_modules_bzl = "@%s//:%s" % (rctx.name, node_modules_bzl_file),
         ),
     ]
+
+    d_text = ""
+    for dd in direct_dependencies:
+        d_text += dd + "\n"
+    rctx.file("direct_deps.bazel", d_text)
+    p_text = ""
+    for p in packages:
+        p_text += p + "\n"
+    rctx.file("packages.bazel", p_text)
 
     for (i, v) in enumerate(packages.items()):
         (versioned_name, package) = v
@@ -306,6 +395,9 @@ def _impl(rctx):
         repo_name = "%s__%s" % (rctx.name, npm_utils.bazel_name(name, version))
 
         indirect = False if versioned_name in direct_dependencies else True
+
+        if "@hz/" in versioned_name:
+            indirect = False
 
         repositories_bzl.append(_NPM_IMPORT_TMPL.format(
             name = repo_name,
