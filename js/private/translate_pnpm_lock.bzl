@@ -168,6 +168,7 @@ def _process_lockfile(rctx):
         rctx.path(Label("@aspect_rules_js//js/private:translate_pnpm_lock.js")),
         json_lockfile_path,
         translated_json_path,
+        _user_workspace_root(rctx),
     ]
     env = {}
     if rctx.attr.prod:
@@ -224,6 +225,18 @@ _BIN_TMPL = \
     """load("@{repo_name}//:package_json.bzl", _bin = "bin")
 bin = _bin
 """
+
+def _user_workspace_root(repository_ctx):
+    pnpm_lock = repository_ctx.attr.pnpm_lock
+    segments = []
+    if pnpm_lock.package:
+        segments.extend(pnpm_lock.package.split("/"))
+    segments.extend(pnpm_lock.name.split("/"))
+    segments.pop()
+    user_workspace_root = repository_ctx.path(pnpm_lock).dirname
+    for i in segments:
+        user_workspace_root = user_workspace_root.dirname
+    return str(user_workspace_root)
 
 def _impl(rctx):
     if rctx.attr.prod and rctx.attr.dev:
@@ -284,6 +297,15 @@ def link_js_packages():
         has_bin = package_info.get("hasBin")
         requires_build = package_info.get("requiresBuild")
         integrity = package_info.get("integrity")
+        # integrity = paths.join(
+        #     _user_workspace_root(rctx), 
+        #     "common", 
+        #     "temp", 
+        #     "node_modules", 
+        #     ".pnpm",
+        #     pnpm_utils.virtual_store_name(name, pnpm_version),
+        #     "node_modules",
+        #     name)
         transitive_closure = package_info.get("transitiveClosure")
 
         if rctx.attr.prod and dev:
@@ -316,6 +338,8 @@ def link_js_packages():
         repo_name = "%s__%s" % (rctx.name, pnpm_utils.bazel_name(name, pnpm_version))
 
         indirect = False if package in direct_dependencies else True
+        if "@hz/" in package:
+            indirect = False
 
         lifecycle_hooks_exclude = not rctx.attr.enable_lifecycle_hooks or name in rctx.attr.lifecycle_hooks_exclude or friendly_name in rctx.attr.lifecycle_hooks_exclude
 

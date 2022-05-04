@@ -247,6 +247,8 @@ def _impl(rctx):
         msg = "tar %s failed: \nSTDOUT:\n%s\nSTDERR:\n%s" % (_EXTRACT_DIRNAME, result.stdout, result.stderr)
         fail(msg)
 
+    # rctx.symlink(rctx.attr.integrity, _EXTRACT_DIRNAME)
+
     ref_deps = []
     lc_deps = []
     deps = []
