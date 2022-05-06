@@ -31,16 +31,6 @@ function getDirectDependencies(lockfile, packageDep = false) {
     }
 }
 
-function getPackageFromAlias(name, version) {
-    // An alias, use it
-    if (alias.charAt(0) === "/") {
-        const [aliasName, aliasVersion] = parsePnpmName(version)
-        name = aliasName.substring(1)
-        version = aliasVersion
-    }
-    return [name, version]
-}
-
 function pnpmName(name, version) {
     // Make a name/version pnpm-style name for a package name and version
     // (matches pnpm_name in js/private/pnpm_utils.bzl)
@@ -217,8 +207,6 @@ async function main(argv) {
             requiresBuild,
         }
     }
-
-    writeFileSync("packages.json", JSON.stringify(packages, null, 2))
 
     for (const package of Object.keys(packages)) {
         const packageInfo = packages[package]

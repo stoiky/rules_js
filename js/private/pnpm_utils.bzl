@@ -34,12 +34,10 @@ def _strip_peer_dep_version(version):
 
 def _pnpm_name(name, version):
     "Make a name/version pnpm-style name for a package name and version"
-    # [name,  version] = _get_package_from_alias(name, version)
     return "%s/%s" % (name, version)
 
 def _friendly_name(name, version):
     "Make a name@version developer-friendly name for a package name and version"
-    # [name,  version] = _get_package_from_alias(name, version)
     return "%s@%s" % (name, version)
 
 def _virtual_store_name(name, pnpm_version):
