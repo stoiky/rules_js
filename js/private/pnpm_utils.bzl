@@ -5,6 +5,7 @@ def _bazel_name(name, pnpm_version = None):
     escaped_name = name.replace("@", "at_").replace("/", "_")
     if not pnpm_version:
         return escaped_name
+    [escaped_name,  pnpm_version] = _get_package_from_alias(escaped_name, pnpm_version)
     pnpm_version_segments = pnpm_version.split("_")
     escaped_version = pnpm_version_segments[0]
     peer_version = "_".join(pnpm_version_segments[1:])
@@ -13,6 +14,14 @@ def _bazel_name(name, pnpm_version = None):
     if peer_version:
         escaped_version = "%s__%s" % (escaped_version, peer_version.replace("/", "_").replace("@", "_").replace("+", "_"))
     return "%s_%s" % (escaped_name, escaped_version)
+
+def _get_package_from_alias(name, version):
+    if version.startswith("/"):
+        version = version[1:] # remove first /
+        version_alias_segments = version.split("/", 1)
+        name = version_alias_segments[0] # alias
+        version = version_alias_segments[1] # version of original
+    return [name, version]
 
 def _strip_peer_dep_version(version):
     "Remove peer dependency syntax from version string"
@@ -25,10 +34,12 @@ def _strip_peer_dep_version(version):
 
 def _pnpm_name(name, version):
     "Make a name/version pnpm-style name for a package name and version"
+    # [name,  version] = _get_package_from_alias(name, version)
     return "%s/%s" % (name, version)
 
 def _friendly_name(name, version):
     "Make a name@version developer-friendly name for a package name and version"
+    # [name,  version] = _get_package_from_alias(name, version)
     return "%s@%s" % (name, version)
 
 def _virtual_store_name(name, pnpm_version):

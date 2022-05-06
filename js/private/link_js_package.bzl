@@ -102,7 +102,7 @@ def _impl(ctx):
     direct_files = []
     direct_dep_refs = []
 
-    if ctx.file.src or ctx.attr.always_output_bins:
+    if ctx.attr.always_output_bins:
         # output bins for this package
         for (bin_name, bin_path) in ctx.attr.bins.items():
             # output a bin entry point this bin
@@ -152,7 +152,7 @@ def _impl(ctx):
             copy_directory_action(ctx, ctx.file.src, virtual_store_out, is_windows = is_windows)
             direct_files.append(virtual_store_out)
 
-        if not ctx.attr.indirect:
+        if not ctx.attr.indirect and ctx.attr.version == "workspace":
             linked_js_package_dir = virtual_store_out
 
             # symlink the package's path in the virtual store to the root of the node_modules

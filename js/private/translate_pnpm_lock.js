@@ -1,8 +1,54 @@
 const { writeFileSync } = require('fs')
+const { join } = require('path')
+
+const prod = !!process.env.TRANSLATE_PACKAGE_LOCK_PROD
+const dev = !!process.env.TRANSLATE_PACKAGE_LOCK_DEV
+const noOptional = !!process.env.TRANSLATE_PACKAGE_LOCK_NO_OPTIONAL
+
+function getDirectDependencies(lockfile, packageDep = false) {
+    let packageDependencies = {}
+    let directDependencies = []
+    const lockDependencies = {
+        ...(!prod && lockfile.devDependencies ? lockfile.devDependencies : {}),
+        ...(!dev && lockfile.dependencies ? lockfile.dependencies : {}),
+        ...(!noOptional && lockfile.optionalDependencies
+            ? lockfile.optionalDependencies
+            : {}),
+    }
+    for (const name of Object.keys(lockDependencies)) {
+        let constructName = pnpmName(name, lockDependencies[name])
+        if (packageDep) {
+            const [name, pnpmVersion] = parsePnpmName(constructName)
+            packageDependencies[name] = pnpmVersion
+        } else {
+            directDependencies.push(constructName)
+        }
+    }
+    if (packageDep) {
+        return packageDependencies
+    } else {
+        return directDependencies
+    }
+}
+
+function getPackageFromAlias(name, version) {
+    // An alias, use it
+    if (alias.charAt(0) === "/") {
+        const [aliasName, aliasVersion] = parsePnpmName(version)
+        name = aliasName.substring(1)
+        version = aliasVersion
+    }
+    return [name, version]
+}
 
 function pnpmName(name, version) {
     // Make a name/version pnpm-style name for a package name and version
     // (matches pnpm_name in js/private/pnpm_utils.bzl)
+
+    if (version.startsWith("link:")) {
+        version = "workspace"
+    }
+
     return `${name}/${version}`
 }
 
@@ -28,8 +74,16 @@ function gatherTransitiveClosure(
     if (!deps) {
         return
     }
-    for (const name of Object.keys(deps)) {
-        const version = deps[name]
+    for (let name of Object.keys(deps)) {
+        let version = deps[name]
+
+        // An alias, use it
+        if (version.charAt(0) === "/") {
+            const [aliasName, aliasVersion] = parsePnpmName(version)
+            name = aliasName.substring(1)
+            version = aliasVersion
+        }
+
         if (!transitiveClosure[name]) {
             transitiveClosure[name] = []
         }
@@ -37,6 +91,7 @@ function gatherTransitiveClosure(
             continue
         }
         transitiveClosure[name].push(version)
+
         const packageInfo = packages[pnpmName(name, version)]
         const dependencies = noOptional
             ? packageInfo.dependencies
@@ -54,14 +109,15 @@ function gatherTransitiveClosure(
 }
 
 async function main(argv) {
-    if (argv.length !== 2) {
+    if (argv.length !== 3) {
         console.error(
-            'Usage: node translate_pnpm_lock.js [pnpmLockJson] [outputJson]'
+            'Usage: node translate_pnpm_lock.js [pnpmLockJson] [outputJson] [workspacePath]'
         )
         process.exit(1)
     }
     const pnpmLockJson = argv[0]
     const outputJson = argv[1]
+    const workspacePath = argv[2]
 
     const lockfile = require(pnpmLockJson)
 
@@ -86,23 +142,45 @@ async function main(argv) {
         process.exit(1)
     }
 
-    const prod = !!process.env.TRANSLATE_PACKAGE_LOCK_PROD
-    const dev = !!process.env.TRANSLATE_PACKAGE_LOCK_DEV
-    const noOptional = !!process.env.TRANSLATE_PACKAGE_LOCK_NO_OPTIONAL
-
-    const lockDependencies = {
-        ...(!prod && lockfile.devDependencies ? lockfile.devDependencies : {}),
-        ...(!dev && lockfile.dependencies ? lockfile.dependencies : {}),
-        ...(!noOptional && lockfile.optionalDependencies
-            ? lockfile.optionalDependencies
-            : {}),
+    let importers = {}
+    let packages = {}
+    let directDependencies = []
+    if (lockfile.specifiers) {
+        // If there's one single project in the lockfile
+        // we will find 'specifiers' there along 'dependencies' etc
+        directDependencies = getDirectDependencies(lockfile)
+    } else if (lockfile.importers) {
+        // If there are multiple projects in the lockfile
+        // they will be under the 'importers' key
+        for (var importer_name in lockfile.importers) {
+            let importer_info = lockfile.importers[importer_name];
+            // Root level project, if there is none, this should be skipped
+            if (importer_name == "." && Object.keys(importer_info.specifiers).length === 0) {
+                continue
+            }
+            project_path = importer_name.slice("../../".length) // get this programatically
+            project_package = require(join(workspacePath, project_path, "package.json"))
+            project_name = project_package["name"]
+            project_version = "workspace"
+            packages[join(project_name, project_version)] = {
+                name: project_name,
+                pnpmVersion: project_version,
+                integrity: join(workspacePath, project_path),
+                dependencies: getDirectDependencies(importer_info, true) || {},
+                dev: !!importer_info.dev,
+                optional: !!importer_info.optional,
+                hasBin: !!importer_info.hasBin,
+                requiresBuild: !!importer_info.requiresBuild,
+            }
+            directDependencies = directDependencies.concat(getDirectDependencies(importer_info))
+        }
+    } else {
+        console.error('no specifiers or importers in lockfile')
+        process.exit(2)
     }
-    const directDependencies = []
-    for (const name of Object.keys(lockDependencies)) {
-        directDependencies.push(pnpmName(name, lockDependencies[name]))
-    }
 
-    packages = {}
+    // writeFileSync("importers.json", JSON.stringify(importers, null, 2))
+
     for (const packagePath of Object.keys(lockPackages)) {
         const packageSnapshot = lockPackages[packagePath]
         if (!packagePath.startsWith('/')) {
@@ -140,6 +218,8 @@ async function main(argv) {
         }
     }
 
+    writeFileSync("packages.json", JSON.stringify(packages, null, 2))
+
     for (const package of Object.keys(packages)) {
         const packageInfo = packages[package]
         const transitiveClosure = {}
@@ -159,11 +239,13 @@ async function main(argv) {
         packageInfo.transitiveClosure = transitiveClosure
     }
 
-    result = { dependencies: directDependencies, packages }
+    console.log("unique directDependencies", [...new Set(directDependencies)].length)
+
+    result = { dependencies: [...new Set(directDependencies)], packages }
 
     writeFileSync(outputJson, JSON.stringify(result, null, 2))
 }
 
-;(async () => {
+; (async () => {
     await main(process.argv.slice(2))
 })()
