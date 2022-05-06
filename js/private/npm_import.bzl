@@ -123,7 +123,7 @@ _RUN_LIFECYCLE_HOOKS_TMPL = """
         # direct dep references
         deps = {ref_deps},
         # output bins when src is not set
-        always_output_bins = True,
+        always_output_bins = False,
         visibility = ["//visibility:public"],{maybe_indirect}{maybe_bins}
     )
 
@@ -219,35 +219,36 @@ _EXTRACT_DIRNAME = "package"
 _LINK_JS_PACKAGE_BZL_FILENAME = "link_js_package.bzl"
 
 def _impl(rctx):
-    numeric_version = pnpm_utils.strip_peer_dep_version(rctx.attr.version)
+    if "/Users/" in rctx.attr.integrity:
+        rctx.symlink(rctx.attr.integrity, _EXTRACT_DIRNAME)
+    else:
+        numeric_version = pnpm_utils.strip_peer_dsep_version(rctx.attr.version)
 
-    tarball = "package.tgz"
-    rctx.download(
-        output = tarball,
-        url = "https://registry.npmjs.org/{0}/-/{1}-{2}.tgz".format(
-            rctx.attr.package,
-            # scoped packages contain a slash in the name, which doesn't appear in the later part of the URL
-            rctx.attr.package.split("/")[-1],
-            numeric_version,
-        ),
-        integrity = rctx.attr.integrity,
-    )
+        tarball = "package.tgz"
+        rctx.download(
+            output = tarball,
+            url = "https://registry.npmjs.org/{0}/-/{1}-{2}.tgz".format(
+                rctx.attr.package,
+                # scoped packages contain a slash in the name, which doesn't appear in the later part of the URL
+                rctx.attr.package.split("/")[-1],
+                numeric_version,
+            ),
+            integrity = rctx.attr.integrity,
+        )
 
-    mkdir_args = ["mkdir", "-p", _EXTRACT_DIRNAME] if not repo_utils.is_windows(rctx) else ["cmd", "/c", "if not exist {extract_dirname} (mkdir {extract_dirname})".format(_EXTRACT_DIRNAME = _EXTRACT_DIRNAME.replace("/", "\\"))]
-    result = rctx.execute(mkdir_args)
-    if result.return_code:
-        msg = "mkdir %s failed: \nSTDOUT:\n%s\nSTDERR:\n%s" % (_EXTRACT_DIRNAME, result.stdout, result.stderr)
-        fail(msg)
+        mkdir_args = ["mkdir", "-p", _EXTRACT_DIRNAME] if not repo_utils.is_windows(rctx) else ["cmd", "/c", "if not exist {extract_dirname} (mkdir {extract_dirname})".format(_EXTRACT_DIRNAME = _EXTRACT_DIRNAME.replace("/", "\\"))]
+        result = rctx.execute(mkdir_args)
+        if result.return_code:
+            msg = "mkdir %s failed: \nSTDOUT:\n%s\nSTDERR:\n%s" % (_EXTRACT_DIRNAME, result.stdout, result.stderr)
+            fail(msg)
 
-    # npm packages are always published with one top-level directory inside the tarball, tho the name is not predictable
-    # so we use tar here which takes a --strip-components N argument instead of rctx.download_and_extract
-    untar_args = ["tar", "-xf", tarball, "--strip-components", str(1), "-C", _EXTRACT_DIRNAME]
-    result = rctx.execute(untar_args)
-    if result.return_code:
-        msg = "tar %s failed: \nSTDOUT:\n%s\nSTDERR:\n%s" % (_EXTRACT_DIRNAME, result.stdout, result.stderr)
-        fail(msg)
-
-    # rctx.symlink(rctx.attr.integrity, _EXTRACT_DIRNAME)
+        # npm packages are always published with one top-level directory inside the tarball, tho the name is not predictable
+        # so we use tar here which takes a --strip-components N argument instead of rctx.download_and_extract
+        untar_args = ["tar", "-xf", tarball, "--strip-components", str(1), "-C", _EXTRACT_DIRNAME]
+        result = rctx.execute(untar_args)
+        if result.return_code:
+            msg = "tar %s failed: \nSTDOUT:\n%s\nSTDERR:\n%s" % (_EXTRACT_DIRNAME, result.stdout, result.stderr)
+            fail(msg)
 
     ref_deps = []
     lc_deps = []
@@ -387,7 +388,7 @@ def _impl(rctx):
         ]))
 
     # Add an namespace if this is a direct dependency
-    if not rctx.attr.indirect:
+    if not rctx.attr.indirect and rctx.attr.version == "workspace":
         link_js_package_bzl.append(_ALIAS_TMPL.format(
             alias = pnpm_utils.bazel_name(rctx.attr.package),
             namespace = pnpm_utils.js_package_target_namespace,

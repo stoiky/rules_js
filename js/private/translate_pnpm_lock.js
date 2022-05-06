@@ -5,7 +5,8 @@ const prod = !!process.env.TRANSLATE_PACKAGE_LOCK_PROD
 const dev = !!process.env.TRANSLATE_PACKAGE_LOCK_DEV
 const noOptional = !!process.env.TRANSLATE_PACKAGE_LOCK_NO_OPTIONAL
 
-function getDirectDependencies(lockfile) {
+function getDirectDependencies(lockfile, packageDep = false) {
+    let packageDependencies = {}
     let directDependencies = []
     const lockDependencies = {
         ...(!prod && lockfile.devDependencies ? lockfile.devDependencies : {}),
@@ -15,9 +16,29 @@ function getDirectDependencies(lockfile) {
             : {}),
     }
     for (const name of Object.keys(lockDependencies)) {
-        directDependencies.push(pnpmName(name, lockDependencies[name]))
+        let constructName = pnpmName(name, lockDependencies[name])
+        if (packageDep) {
+            const [name, pnpmVersion] = parsePnpmName(constructName)
+            packageDependencies[name] = pnpmVersion
+        } else {
+            directDependencies.push(constructName)
+        }
     }
-    return directDependencies
+    if (packageDep) {
+        return packageDependencies
+    } else {
+        return directDependencies
+    }
+}
+
+function getPackageFromAlias(name, version) {
+    // An alias, use it
+    if (alias.charAt(0) === "/") {
+        const [aliasName, aliasVersion] = parsePnpmName(version)
+        name = aliasName.substring(1)
+        version = aliasVersion
+    }
+    return [name, version]
 }
 
 function pnpmName(name, version) {
@@ -26,17 +47,6 @@ function pnpmName(name, version) {
 
     if (version.startsWith("link:")) {
         version = "workspace"
-    }
-
-    // if (version.startsWith("workspace:")) {
-    //     version = "workspace"
-    // }
-
-    // An alias, use it
-    if (version.charAt(0) === "/") {
-        const [aliasName, aliasVersion] = parsePnpmName(version)
-        name = aliasName.substring(1)
-        version = aliasVersion
     }
 
     return `${name}/${version}`
@@ -64,8 +74,16 @@ function gatherTransitiveClosure(
     if (!deps) {
         return
     }
-    for (const name of Object.keys(deps)) {
-        const version = deps[name]
+    for (let name of Object.keys(deps)) {
+        let version = deps[name]
+
+        // An alias, use it
+        if (version.charAt(0) === "/") {
+            const [aliasName, aliasVersion] = parsePnpmName(version)
+            name = aliasName.substring(1)
+            version = aliasVersion
+        }
+
         if (!transitiveClosure[name]) {
             transitiveClosure[name] = []
         }
@@ -73,6 +91,7 @@ function gatherTransitiveClosure(
             continue
         }
         transitiveClosure[name].push(version)
+
         const packageInfo = packages[pnpmName(name, version)]
         const dependencies = noOptional
             ? packageInfo.dependencies
@@ -123,6 +142,7 @@ async function main(argv) {
         process.exit(1)
     }
 
+    let importers = {}
     let packages = {}
     let directDependencies = []
     if (lockfile.specifiers) {
@@ -146,11 +166,7 @@ async function main(argv) {
                 name: project_name,
                 pnpmVersion: project_version,
                 integrity: join(workspacePath, project_path),
-                dependencies: {
-                    ...importer_info["dependencies"], 
-                    ...importer_info["devDependencies"],
-                    ...importer_info["optionalDependencies"]
-                },
+                dependencies: getDirectDependencies(importer_info, true) || {},
                 dev: !!importer_info.dev,
                 optional: !!importer_info.optional,
                 hasBin: !!importer_info.hasBin,
@@ -163,7 +179,7 @@ async function main(argv) {
         process.exit(2)
     }
 
-    // writeFileSync("importers.json", JSON.stringify(packages, null, 2))
+    // writeFileSync("importers.json", JSON.stringify(importers, null, 2))
 
     for (const packagePath of Object.keys(lockPackages)) {
         const packageSnapshot = lockPackages[packagePath]
@@ -202,6 +218,8 @@ async function main(argv) {
         }
     }
 
+    writeFileSync("packages.json", JSON.stringify(packages, null, 2))
+
     for (const package of Object.keys(packages)) {
         const packageInfo = packages[package]
         const transitiveClosure = {}
@@ -221,8 +239,7 @@ async function main(argv) {
         packageInfo.transitiveClosure = transitiveClosure
     }
 
-    console.log("directDependencies", [...new Set(directDependencies)].length)
-    console.log("packages", Object.keys(packages).length)
+    console.log("unique directDependencies", [...new Set(directDependencies)].length)
 
     result = { dependencies: [...new Set(directDependencies)], packages }
 
