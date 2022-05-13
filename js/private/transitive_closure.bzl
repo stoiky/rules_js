@@ -27,6 +27,7 @@ def gather_transitive_closure(packages, no_optional, direct_deps, transitive_clo
         deps = stack.pop()
         for name in deps.keys():
             version = deps[name]
+            [name,  version] = pnpm_utils.get_package_from_alias(name, version)
             transitive_closure[name] = transitive_closure.get(name, [])
             if version in transitive_closure[name]:
                 continue

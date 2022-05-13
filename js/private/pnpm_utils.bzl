@@ -5,6 +5,7 @@ def _bazel_name(name, pnpm_version = None):
     escaped_name = name.replace("@", "at_").replace("/", "_")
     if not pnpm_version:
         return escaped_name
+    [escaped_name,  pnpm_version] = _get_package_from_alias(escaped_name, pnpm_version)
     pnpm_version_segments = pnpm_version.split("_")
     escaped_version = pnpm_version_segments[0].replace("/", "_")
     peer_version = "_".join(pnpm_version_segments[1:])
@@ -34,6 +35,15 @@ def _parse_pnpm_name(pnpmName):
     if len(segments) != 2:
         fail("unexpected pnpm versioned name " + pnpmName)
     return segments
+
+def _get_package_from_alias(name, version):
+    # To go around https://github.com/aspect-build/rules_js/issues/86
+    if version.startswith("/"):
+        version = version[1:] # remove first /
+        version_alias_segments = version.split("/", 1)
+        name = version_alias_segments[0] # alias
+        version = version_alias_segments[1] # version of original
+    return [name, version]
 
 def _assert_lockfile_version(version, testonly = False):
     if type(version) != type(1.0):
@@ -76,6 +86,7 @@ pnpm_utils = struct(
     parse_pnpm_name = _parse_pnpm_name,
     friendly_name = _friendly_name,
     virtual_store_name = _virtual_store_name,
+    get_package_from_alias = _get_package_from_alias,
     strip_peer_dep_version = _strip_peer_dep_version,
     # Prefix namespace to use for generated js_binary targets and aliases
     js_package_target_namespace = "jsp__",

@@ -270,6 +270,18 @@ def _fp_link_path(root_path, import_path, rel_path):
         fail("root bazel package first party dep not supported")
     return fp_link_path
 
+def _user_workspace_root(repository_ctx):
+    pnpm_lock = repository_ctx.attr.pnpm_lock
+    segments = []
+    if pnpm_lock.package:
+        segments.extend(pnpm_lock.package.split("/"))
+    segments.extend(pnpm_lock.name.split("/"))
+    segments.pop()
+    user_workspace_root = repository_ctx.path(pnpm_lock).dirname
+    for i in segments:
+        user_workspace_root = user_workspace_root.dirname
+    return str(user_workspace_root)
+
 def _impl(rctx):
     if rctx.attr.prod and rctx.attr.dev:
         fail("prod and dev attributes cannot both be set to true")
@@ -347,7 +359,19 @@ def link_js_packages():
         optional = package_info.get("optional")
         has_bin = package_info.get("hasBin")
         requires_build = package_info.get("requiresBuild")
-        integrity = package_info.get("integrity")
+        # Workaround for third party packages
+        # so they are brought in from the workspace
+        # instead of being downloaded again.
+        # integrity = package_info.get("integrity")
+        integrity = paths.join(
+            _user_workspace_root(rctx),
+            "common", 
+            "temp", 
+            "node_modules", 
+            ".pnpm",
+            pnpm_utils.virtual_store_name(name, pnpm_version),
+            "node_modules",
+            name)
         transitive_closure = package_info.get("transitiveClosure")
 
         if rctx.attr.prod and dev:

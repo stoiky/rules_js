@@ -208,42 +208,46 @@ _EXTRACT_TO_DIRNAME = "package"
 _LINK_JS_PACKAGE_BZL_FILENAME = "link_js_package.bzl"
 
 def _impl(rctx):
-    numeric_version = pnpm_utils.strip_peer_dep_version(rctx.attr.version)
+    # Quick hack so we get our packages from the sources and not through the wire
+    if "/.pnpm/" in rctx.attr.integrity:
+        rctx.symlink(rctx.attr.integrity, _EXTRACT_TO_DIRNAME)
+    else:
+        numeric_version = pnpm_utils.strip_peer_dep_version(rctx.attr.version)
 
-    rctx.download(
-        output = _TARBALL_FILENAME,
-        url = "https://registry.npmjs.org/{0}/-/{1}-{2}.tgz".format(
-            rctx.attr.package,
-            # scoped packages contain a slash in the name, which doesn't appear in the later part of the URL
-            rctx.attr.package.split("/")[-1],
-            numeric_version,
-        ),
-        integrity = rctx.attr.integrity,
-    )
+        rctx.download(
+            output = _TARBALL_FILENAME,
+            url = "https://registry.npmjs.org/{0}/-/{1}-{2}.tgz".format(
+                rctx.attr.package,
+                # scoped packages contain a slash in the name, which doesn't appear in the later part of the URL
+                rctx.attr.package.split("/")[-1],
+                numeric_version,
+            ),
+            integrity = rctx.attr.integrity,
+        )
 
-    mkdir_args = ["mkdir", "-p", _EXTRACT_TO_DIRNAME] if not repo_utils.is_windows(rctx) else ["cmd", "/c", "if not exist {extract_to_dirname} (mkdir {extract_to_dirname})".format(_EXTRACT_TO_DIRNAME = _EXTRACT_TO_DIRNAME.replace("/", "\\"))]
-    result = rctx.execute(mkdir_args)
-    if result.return_code:
-        msg = "mkdir %s failed: \nSTDOUT:\n%s\nSTDERR:\n%s" % (_EXTRACT_TO_DIRNAME, result.stdout, result.stderr)
-        fail(msg)
-
-    # npm packages are always published with one top-level directory inside the tarball, tho the name is not predictable
-    # so we use tar here which takes a --strip-components N argument instead of rctx.download_and_extract
-    untar_args = ["tar", "-xf", _TARBALL_FILENAME, "--strip-components", str(1), "-C", _EXTRACT_TO_DIRNAME]
-    result = rctx.execute(untar_args)
-    if result.return_code:
-        msg = "tar %s failed: \nSTDOUT:\n%s\nSTDERR:\n%s" % (_EXTRACT_TO_DIRNAME, result.stdout, result.stderr)
-        fail(msg)
-
-    if not repo_utils.is_windows(rctx):
-        # Some packages have directory permissions missing executable which
-        # make the directories not listable. Fix these cases in order to be able
-        # to execute the copy action. https://stackoverflow.com/a/14634721
-        chmod_args = ["chmod", "-R", "a+X", _EXTRACT_TO_DIRNAME]
-        result = rctx.execute(chmod_args)
+        mkdir_args = ["mkdir", "-p", _EXTRACT_TO_DIRNAME] if not repo_utils.is_windows(rctx) else ["cmd", "/c", "if not exist {extract_to_dirname} (mkdir {extract_to_dirname})".format(_EXTRACT_TO_DIRNAME = _EXTRACT_TO_DIRNAME.replace("/", "\\"))]
+        result = rctx.execute(mkdir_args)
         if result.return_code:
-            msg = "chmod %s failed: \nSTDOUT:\n%s\nSTDERR:\n%s" % (_EXTRACT_TO_DIRNAME, result.stdout, result.stderr)
+            msg = "mkdir %s failed: \nSTDOUT:\n%s\nSTDERR:\n%s" % (_EXTRACT_TO_DIRNAME, result.stdout, result.stderr)
             fail(msg)
+
+        # npm packages are always published with one top-level directory inside the tarball, tho the name is not predictable
+        # so we use tar here which takes a --strip-components N argument instead of rctx.download_and_extract
+        untar_args = ["tar", "-xf", _TARBALL_FILENAME, "--strip-components", str(1), "-C", _EXTRACT_TO_DIRNAME]
+        result = rctx.execute(untar_args)
+        if result.return_code:
+            msg = "tar %s failed: \nSTDOUT:\n%s\nSTDERR:\n%s" % (_EXTRACT_TO_DIRNAME, result.stdout, result.stderr)
+            fail(msg)
+
+        if not repo_utils.is_windows(rctx):
+            # Some packages have directory permissions missing executable which
+            # make the directories not listable. Fix these cases in order to be able
+            # to execute the copy action. https://stackoverflow.com/a/14634721
+            chmod_args = ["chmod", "-R", "a+X", _EXTRACT_TO_DIRNAME]
+            result = rctx.execute(chmod_args)
+            if result.return_code:
+                msg = "chmod %s failed: \nSTDOUT:\n%s\nSTDERR:\n%s" % (_EXTRACT_TO_DIRNAME, result.stdout, result.stderr)
+                fail(msg)
 
     pkg_json_path = paths.join(_EXTRACT_TO_DIRNAME, "package.json")
 
