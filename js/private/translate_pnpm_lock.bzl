@@ -364,16 +364,7 @@ def link_js_packages():
         # Workaround for third party packages
         # so they are brought in from the workspace
         # instead of being downloaded again.
-        # integrity = package_info.get("integrity")
-        integrity = paths.join(
-            _user_workspace_root(rctx),
-            "common", 
-            "temp", 
-            "node_modules", 
-            ".pnpm",
-            pnpm_utils.virtual_store_name(name, pnpm_version),
-            "node_modules",
-            name)
+        integrity = package_info.get("integrity")
         transitive_closure = package_info.get("transitiveClosure")
 
         if rctx.attr.prod and dev:
