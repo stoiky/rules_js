@@ -1,0 +1,206 @@
+load("@aspect_rules_js//js:defs.bzl", "js_binary", "js_test")
+load("@aspect_rules_js//js:run_js_binary.bzl", "run_js_binary")
+load("@bazel_skylib//rules:diff_test.bzl", "diff_test")
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@npm//:defs.bzl", "link_js_packages", "package", "package_dir")
+
+# Directly load from rollup's bin entries, skipping the "bin" helper from package_json.bzl
+# Just to show what the syntax de-sugaring looks like, and to test that
+# bare `npm_import` produces working binaries.
+load("@npm__rollup__2.70.2//examples/npm_deps:package_json.bzl", "rollup", "rollup_binary", "rollup_test")
+
+# Load from the "bin" property from the package.json of the uvu package
+load("@npm//examples/npm_deps/uvu:package_json.bzl", uvu_bin = "bin")
+
+# Link all packages in our package.json to
+# bazel-bin/examples/npm_deps/node_modules
+link_js_packages()
+
+#######################################
+# Use case 1: transitive npm dependencies
+
+write_file(
+    name = "write1",
+    out = "case1.js",
+    content = ["require('fs').writeFileSync(process.argv[2], require('@gregmagolan/test-b'))"],
+)
+
+write_file(
+    name = "expected1",
+    out = "expected1.txt",
+    content = ["test-b-0.0.2/test-a-0.0.1"],
+)
+
+js_binary(
+    name = "bin1",
+    data = ["@npm//examples/npm_deps/@gregmagolan/test-b"],
+    entry_point = "case1.js",
+)
+
+run_js_binary(
+    name = "run1",
+    srcs = [],
+    outs = ["actual1"],
+    args = ["examples/npm_deps/actual1"],
+    tool = ":bin1",
+)
+
+diff_test(
+    name = "test1",
+    file1 = "expected1",
+    file2 = "actual1",
+)
+
+#######################################
+# Use case 2: peer deps
+js_test(
+    name = "test_peer",
+    data = [
+        "@npm//examples/npm_deps/@rollup/plugin-commonjs",
+        "@npm//examples/npm_deps/mobx-react",
+        "@npm//examples/npm_deps/react",
+        # TODO: fix this test so we test a peer dependency without requiring it as a direct
+        # dependency https://github.com/aspect-build/rules_js/issues/92
+        "@npm//examples/npm_deps/rollup",
+    ],
+    entry_point = "peer_test.js",
+)
+
+#######################################
+# Use case 3: postinstall creates a file
+# The @aspect-test/c package's postinstall creates a data.json file
+
+write_file(
+    name = "write3",
+    out = "case3.js",
+    content = ["""
+const content = require('@aspect-test/c/data.json')
+if (content.answer !== '42*') {
+    console.error(`expected answer to be '42*', but got '${content.answer}'`)
+    process.exit(1);
+}
+"""],
+)
+
+js_test(
+    name = "test3",
+    data = [
+        package("@aspect-test/c", "examples"),
+    ],
+    entry_point = "case3.js",
+)
+
+#######################################
+# Use case 4: custom postinstall creates a file
+# See postinstall on @aspect-test/c in WORKSPACE
+
+write_file(
+    name = "write4",
+    out = "case4.js",
+    content = ["""
+const fs = require('fs')
+const path = require('path')
+const content = fs.readFileSync(path.join(process.argv[2], 'cow.txt'), 'utf-8')
+console.log(content)
+if (!/^moo\\s+mooo\\s*$/.test(content)) {
+    console.error("expected file to contain cow sounds")
+    process.exit(1);
+}
+"""],
+)
+
+js_test(
+    name = "test4",
+    args = ["$(rootpath %s)" % package_dir("@aspect-test/c", "examples")],
+    data = [
+        package_dir("@aspect-test/c", "examples"),
+    ],
+    entry_point = "case4.js",
+)
+
+####################################################
+# Use case 5: bins from npm_import
+# Use a generated rollup and rollup_binary targets from an npm_import
+
+rollup(
+    name = "actual5",
+    args = ["--version"],
+    stdout = "actual5.txt",
+)
+
+rollup_binary(
+    name = "rollup_bin",
+    args = ["--version"],
+)
+
+rollup_test(
+    name = "rollup_version_test",
+    args = ["--version"],
+)
+
+write_file(
+    name = "expected5",
+    out = "expected5.txt",
+    content = [
+        "rollup v2.70.2",
+        "",
+    ],
+)
+
+diff_test(
+    name = "test5",
+    file1 = ":expected5",
+    file2 = ":actual5",
+)
+
+run_js_binary(
+    name = "actual5_alt",
+    args = ["--version"],
+    stdout = "actual5_alt.txt",
+    tool = ":rollup_bin",
+)
+
+diff_test(
+    name = "test5_alt",
+    file1 = ":expected5",
+    file2 = ":actual5_alt",
+)
+
+####################################################
+# Use case 6: bin from translate_pnpm_lock
+# Use a generated bin.uvo_test target
+
+# Generated bin test as a test target
+write_file(
+    name = "uvu_spec",
+    out = "uvu.spec.js",
+    content = [
+        "const { test } = require('uvu');",
+        "const assert = require('uvu/assert');",
+        "const mylib = require('@mycorp/mylib');",
+        "test('version', () => {",
+        "  assert.is(mylib.getAcornVersion(), '8.4.0');",
+        "})",
+        "test.run()",
+    ],
+)
+
+# @unused
+uvu = uvu_bin.uvu
+
+# @unused
+uvu_binary = uvu_bin.uvu_binary
+
+uvu_test = uvu_bin.uvu_test
+
+uvu_test(
+    name = "test_uvu_version",
+    args = [
+        "--color",
+        "false",
+    ],
+    data = [
+        ":uvu_spec",
+        package("@mycorp/mylib", "examples"),
+    ],
+)

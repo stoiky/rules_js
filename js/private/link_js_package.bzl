@@ -119,8 +119,12 @@ def _impl_store(ctx):
         # "node_modules/{virtual_store_root}/{virtual_store_name}/node_modules/{package}"
         virtual_store_directory_path = paths.join("node_modules", pnpm_utils.virtual_store_root, virtual_store_name, "node_modules", package)
 
+        if ctx.label.workspace_name:
+            expected_short_path = paths.join("..", ctx.label.workspace_name, ctx.label.package, virtual_store_directory_path)
+        else:
+            expected_short_path = paths.join(ctx.label.package, virtual_store_directory_path)
         src_directory = ctx.attr.src[JsPackageInfo].directory
-        if src_directory.short_path == paths.join(ctx.label.package, virtual_store_directory_path):
+        if src_directory.short_path == expected_short_path:
             # the input is already the desired output; this is the pattern for
             # packages with lifecycle hooks
             virtual_store_directory = src_directory
@@ -229,7 +233,7 @@ deps of link_js_package must be in the same package or in a parent package.""" %
     ]
     if virtual_store_directory:
         # Provide an output group that provides a single file which is the
-        # package director for use in $(execpath) and $(rootpath).
+        # package directory for use in $(execpath) and $(rootpath).
         # Output group name must match pnpm_utils.package_directory_output_group
         result.append(OutputGroupInfo(package_directory = depset([virtual_store_directory])))
 
@@ -257,7 +261,9 @@ def _impl_direct(ctx):
             runfiles = ctx.runfiles([root_symlink]).merge(ctx.attr.src[DefaultInfo].data_runfiles),
         ),
         ctx.attr.src[_LinkJsPackageInfo],
-        ctx.attr.src[DeclarationInfo],
+        declaration_info(
+            declarations = depset([root_symlink], transitive = [ctx.attr.src[DeclarationInfo].transitive_declarations]),
+        ),
     ]
     if OutputGroupInfo in ctx.attr.src:
         result.append(ctx.attr.src[OutputGroupInfo])

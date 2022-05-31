@@ -1,5 +1,7 @@
 "Utility functions for npm rules"
 
+load(":yaml.bzl", _parse_yaml = "parse")
+
 def _bazel_name(name, pnpm_version = None):
     "Make a bazel friendly name from a package name and (optionally) a version that can be used in repository and target names"
     escaped_name = name.replace("@", "at_").replace("/", "_")
@@ -44,6 +46,17 @@ def _get_package_from_alias(name, version):
         name = version_alias_segments[0] # alias
         version = version_alias_segments[1] # version of original
     return [name, version]
+    
+def _parse_pnpm_lock(lockfile_content):
+    """Parse a pnpm lock file.
+
+    Args:
+        lockfile_content: yaml lockfile content
+
+    Returns:
+        dict containing parsed lockfile
+    """
+    return _parse_yaml(lockfile_content)
 
 def _assert_lockfile_version(version, testonly = False):
     if type(version) != type(1.0):
@@ -84,6 +97,7 @@ pnpm_utils = struct(
     pnpm_name = _pnpm_name,
     assert_lockfile_version = _assert_lockfile_version,
     parse_pnpm_name = _parse_pnpm_name,
+    parse_pnpm_lock = _parse_pnpm_lock,
     friendly_name = _friendly_name,
     virtual_store_name = _virtual_store_name,
     get_package_from_alias = _get_package_from_alias,

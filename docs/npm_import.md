@@ -27,7 +27,7 @@ Advanced users may want to directly fetch a package from npm rather than start f
 
 <pre>
 translate_pnpm_lock(<a href="#translate_pnpm_lock-name">name</a>, <a href="#translate_pnpm_lock-custom_postinstalls">custom_postinstalls</a>, <a href="#translate_pnpm_lock-dev">dev</a>, <a href="#translate_pnpm_lock-lifecycle_hooks_exclude">lifecycle_hooks_exclude</a>, <a href="#translate_pnpm_lock-no_optional">no_optional</a>,
-                    <a href="#translate_pnpm_lock-patch_args">patch_args</a>, <a href="#translate_pnpm_lock-patches">patches</a>, <a href="#translate_pnpm_lock-pnpm_lock">pnpm_lock</a>, <a href="#translate_pnpm_lock-prod">prod</a>, <a href="#translate_pnpm_lock-repo_mapping">repo_mapping</a>, <a href="#translate_pnpm_lock-run_lifecycle_hooks">run_lifecycle_hooks</a>, <a href="#translate_pnpm_lock-yq">yq</a>)
+                    <a href="#translate_pnpm_lock-patch_args">patch_args</a>, <a href="#translate_pnpm_lock-patches">patches</a>, <a href="#translate_pnpm_lock-pnpm_lock">pnpm_lock</a>, <a href="#translate_pnpm_lock-prod">prod</a>, <a href="#translate_pnpm_lock-repo_mapping">repo_mapping</a>, <a href="#translate_pnpm_lock-run_lifecycle_hooks">run_lifecycle_hooks</a>)
 </pre>
 
 Repository rule to generate npm_import rules from pnpm lock file.
@@ -136,7 +136,6 @@ and must depend on packages with their versioned label like `@npm__types_node-15
 | <a id="translate_pnpm_lock-prod"></a>prod |  If true, only install dependencies   | Boolean | optional | False |
 | <a id="translate_pnpm_lock-repo_mapping"></a>repo_mapping |  A dictionary from local repository name to global repository name. This allows controls over workspace dependency resolution for dependencies of this repository.&lt;p&gt;For example, an entry <code>"@foo": "@bar"</code> declares that, for any time this repository depends on <code>@foo</code> (such as a dependency on <code>@foo//some:target</code>, it should actually resolve that dependency within globally-declared <code>@bar</code> (<code>@bar//some:target</code>).   | <a href="https://bazel.build/docs/skylark/lib/dict.html">Dictionary: String -> String</a> | required |  |
 | <a id="translate_pnpm_lock-run_lifecycle_hooks"></a>run_lifecycle_hooks |  If true, runs preinstall, install and postinstall lifecycle hooks on npm packages if they exist   | Boolean | optional | True |
-| <a id="translate_pnpm_lock-yq"></a>yq |  The label to the yq binary to use.         If executing on a windows host, the .exe extension will be appended if there is no .exe, .bat, or .cmd extension on the label.   | <a href="https://bazel.build/docs/build-ref.html#labels">Label</a> | optional | @yq//:yq |
 
 
 <a id="#npm_import"></a>
@@ -144,8 +143,8 @@ and must depend on packages with their versioned label like `@npm__types_node-15
 ## npm_import
 
 <pre>
-npm_import(<a href="#npm_import-name">name</a>, <a href="#npm_import-package">package</a>, <a href="#npm_import-version">version</a>, <a href="#npm_import-deps">deps</a>, <a href="#npm_import-transitive_closure">transitive_closure</a>, <a href="#npm_import-root_path">root_path</a>, <a href="#npm_import-link_paths">link_paths</a>,
-           <a href="#npm_import-run_lifecycle_hooks">run_lifecycle_hooks</a>, <a href="#npm_import-integrity">integrity</a>, <a href="#npm_import-patch_args">patch_args</a>, <a href="#npm_import-patches">patches</a>, <a href="#npm_import-custom_postinstall">custom_postinstall</a>, <a href="#npm_import-yq">yq</a>)
+npm_import(<a href="#npm_import-name">name</a>, <a href="#npm_import-package">package</a>, <a href="#npm_import-version">version</a>, <a href="#npm_import-deps">deps</a>, <a href="#npm_import-transitive_closure">transitive_closure</a>, <a href="#npm_import-root_path">root_path</a>, <a href="#npm_import-link_workspace">link_workspace</a>, <a href="#npm_import-link_paths">link_paths</a>,
+           <a href="#npm_import-run_lifecycle_hooks">run_lifecycle_hooks</a>, <a href="#npm_import-integrity">integrity</a>, <a href="#npm_import-patch_args">patch_args</a>, <a href="#npm_import-patches">patches</a>, <a href="#npm_import-custom_postinstall">custom_postinstall</a>)
 </pre>
 
 Import a single npm package into Bazel.
@@ -227,12 +226,12 @@ common --experimental_downloader_config=.bazel_downloader_config
 | <a id="npm_import-deps"></a>deps |  A dict other npm packages this one depends on where the key is the package name and value is the version   |  <code>{}</code> |
 | <a id="npm_import-transitive_closure"></a>transitive_closure |  A dict all npm packages this one depends on directly or transitively where the key is the package name and value is a list of version(s) depended on in the closure.   |  <code>{}</code> |
 | <a id="npm_import-root_path"></a>root_path |  The root package where the node_modules virtual store is linked to. Typically this is the package that the pnpm-lock.yaml file is located when using <code>translate_pnpm_lock</code>.   |  <code>""</code> |
+| <a id="npm_import-link_workspace"></a>link_workspace |  The workspace name where links will be created for this package. Typically this is the workspace that the pnpm-lock.yaml file is located when using <code>translate_pnpm_lock</code>. Can be left unspecified if the link workspace is the user workspace.   |  <code>""</code> |
 | <a id="npm_import-link_paths"></a>link_paths |  List of paths where direct links will be created at for this package. These paths are relative to the root package with "." being the node_modules at the root package.   |  <code>["."]</code> |
 | <a id="npm_import-run_lifecycle_hooks"></a>run_lifecycle_hooks |  If true, runs <code>preinstall</code>, <code>install</code> and <code>postinstall</code> lifecycle hooks declared in this package.   |  <code>False</code> |
 | <a id="npm_import-integrity"></a>integrity |  Expected checksum of the file downloaded, in Subresource Integrity format. This must match the checksum of the file downloaded.<br><br>This is the same as appears in the pnpm-lock.yaml, yarn.lock or package-lock.json file.<br><br>It is a security risk to omit the checksum as remote files can change.<br><br>At best omitting this field will make your build non-hermetic.<br><br>It is optional to make development easier but should be set before shipping.   |  <code>""</code> |
 | <a id="npm_import-patch_args"></a>patch_args |  Arguments to pass to the patch tool. <code>-p1</code> will usually be needed for patches generated by git.   |  <code>["-p0"]</code> |
 | <a id="npm_import-patches"></a>patches |  Patch files to apply onto the downloaded npm package.   |  <code>[]</code> |
 | <a id="npm_import-custom_postinstall"></a>custom_postinstall |  Custom string postinstall script to run on the installed npm package. Runs after any existing lifecycle hooks if <code>run_lifecycle_hooks</code> is True.   |  <code>""</code> |
-| <a id="npm_import-yq"></a>yq |  The label to the yq binary to use. If executing on a windows host, the .exe extension will be appended if there is no .exe, .bat, or .cmd extension on the label.   |  <code>"@yq//:yq"</code> |
 
 

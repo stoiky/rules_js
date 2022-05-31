@@ -4,6 +4,7 @@ load("@aspect_bazel_lib_host//:defs.bzl", "host")
 load("//js:defs.bzl", "js_binary")
 load(":pnpm_utils_tests.bzl", "pnpm_utils_tests")
 load(":transitive_closure_tests.bzl", "transitive_closure_tests")
+load(":yaml_tests.bzl", "yaml_tests")
 
 # gazelle:exclude *_checked.bzl
 
@@ -11,6 +12,8 @@ load(":transitive_closure_tests.bzl", "transitive_closure_tests")
 pnpm_utils_tests(name = "test_pnpm_utils")
 
 transitive_closure_tests(name = "test_transitive_closure")
+
+yaml_tests(name = "test_yaml")
 
 ####################################################################################################
 # Write a js_binary launcher to the source tree so it is shell checked on commit
@@ -25,12 +28,15 @@ js_binary(
     entry_point = "shellcheck.js",
 )
 
-# For consistency on different platform, replace the host nodejs platform to linux_amd64
+# Make sed replacements for consistency on different platform
 genrule(
     name = "shell_launcher_sed",
     srcs = [":shellcheck_launcher"],
     outs = ["shellcheck_launcher_sed.sh"],
-    cmd = "cat $(execpath :shellcheck_launcher) | sed \"s#%s#linux_amd64#\" > $@" % host.platform,
+    cmd = "cat $(execpath :shellcheck_launcher) | sed \"s#$(BINDIR)#bazel-out/k8-fastbuild/bin#\" | sed \"s#%s#linux_amd64#\" | sed \"s#\\\"%s\\\"#\\\"k8\\\"#\" > $@" % (
+        host.platform,
+        host.os,
+    ),
 )
 
 write_source_files(
@@ -43,8 +49,9 @@ write_source_files(
 write_source_files(
     name = "write_translate_pnpm_lock",
     files = {
-        "repositories_checked.bzl": "@example_npm_deps//:repositories.bzl",
-        "defs_checked.bzl": "@example_npm_deps//:defs.bzl",
-        "package_json_checked.bzl": "@example_npm_deps__rollup__2.70.2//:package_json.bzl",
+        "repositories_checked.bzl": "@npm//:repositories.bzl",
+        "defs_checked.bzl": "@npm//:defs.bzl",
+        "package_json_checked.bzl": "@npm__rollup__2.70.2//examples/npm_deps:package_json.bzl",
+        "package_json_with_dashes_checked.bzl": "@npm__webpack-bundle-analyzer__4.5.0__bufferutil_4.0.1//examples:package_json.bzl",
     },
 )

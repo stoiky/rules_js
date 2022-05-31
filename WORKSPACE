@@ -18,12 +18,6 @@ nodejs_register_toolchains(
     node_version = "16.9.0",
 )
 
-load("@aspect_bazel_lib//lib:repositories.bzl", "DEFAULT_YQ_VERSION", "register_yq_toolchains")
-
-register_yq_toolchains(
-    version = DEFAULT_YQ_VERSION,
-)
-
 load("@bazel_skylib//lib:unittest.bzl", "register_unittest_toolchains")
 
 register_unittest_toolchains()
@@ -47,10 +41,35 @@ gazelle_dependencies()
 ############################################
 # Example npm dependencies
 
-load("//example:translate_pnpm_lock.bzl", example_translate_pnpm_lock = "translate_pnpm_lock")
+load("@aspect_rules_js//js:npm_import.bzl", "npm_import", "translate_pnpm_lock")
 
-example_translate_pnpm_lock()
+translate_pnpm_lock(
+    name = "npm",
+    custom_postinstalls = {
+        "@aspect-test/c": "echo 'moo' > cow.txt",
+        "@aspect-test/c@2.0.0": "echo 'mooo' >> cow.txt",
+    },
+    patch_args = {
+        "@gregmagolan/test-a": ["-p1"],
+    },
+    patches = {
+        "@gregmagolan/test-a": ["//examples:patches/test-a.patch"],
+        "@gregmagolan/test-a@0.0.1": ["//examples:patches/test-a@0.0.1.patch"],
+    },
+    pnpm_lock = "//:pnpm-lock.yaml",
+)
 
-load("//example:npm_imports.bzl", example_npm_imports = "npm_imports")
+load("@npm//:repositories.bzl", "npm_repositories")
 
-example_npm_imports()
+# Declares npm_import rules from the pnpm-lock.yaml file
+npm_repositories()
+
+# As an example, manually import a package using explicit coordinates.
+# Just a demonstration of the syntax de-sugaring.
+npm_import(
+    name = "acorn__8.4.0",
+    integrity = "sha512-ULr0LDaEqQrMFGyQ3bhJkLsbtrQ8QibAseGZeaSUiT/6zb9IvIkomWHJIvgvwad+hinRAgsI51JcWk2yvwyL+w==",
+    package = "acorn",
+    root_path = "examples",
+    version = "8.4.0",
+)

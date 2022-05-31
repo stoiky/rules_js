@@ -5,7 +5,6 @@ load("@bazel_skylib//lib:paths.bzl", "paths")
 load("@bazel_skylib//lib:dicts.bzl", "dicts")
 load(":pnpm_utils.bzl", "pnpm_utils")
 load(":starlark_codegen_utils.bzl", "starlark_codegen_utils")
-load(":repo_toolchains.bzl", "yq_path")
 
 _LINK_JS_PACKAGE_TMPL = """load("@aspect_rules_js//js:defs.bzl", _js_package = "js_package")
 load("@aspect_rules_js//js:run_js_binary.bzl", _run_js_binary = "run_js_binary")
@@ -146,12 +145,13 @@ _BIN_MACRO_TMPL = """
 def {bin_name}(name, **kwargs):
     _directory_path(
         name = "%s__entry_point" % name,
-        directory = ":{namespace}{bazel_name}{dir_postfix}",
+        directory = "@{link_workspace}//{link_package}:{namespace}{bazel_name}{dir_postfix}",
         path = "{bin_path}",
     )
     _js_binary(
         name = "%s__js_binary" % name,
         entry_point = ":%s__entry_point" % name,
+        data = ["@{link_workspace}//{link_package}:{namespace}{bazel_name}"],
     )
     _run_js_binary(
         name = name,
@@ -162,24 +162,26 @@ def {bin_name}(name, **kwargs):
 def {bin_name}_test(name, **kwargs):
     _directory_path(
         name = "%s__entry_point" % name,
-        directory = ":{namespace}{bazel_name}{dir_postfix}",
+        directory = "@{link_workspace}//{link_package}:{namespace}{bazel_name}{dir_postfix}",
         path = "{bin_path}",
     )
     _js_test(
         name = name,
         entry_point = ":%s__entry_point" % name,
+        data = kwargs.pop("data", []) + ["@{link_workspace}//{link_package}:{namespace}{bazel_name}"],
         **kwargs
     )
 
 def {bin_name}_binary(name, **kwargs):
     _directory_path(
         name = "%s__entry_point" % name,
-        directory = ":{namespace}{bazel_name}{dir_postfix}",
+        directory = "@{link_workspace}//{link_package}:{namespace}{bazel_name}{dir_postfix}",
         path = "{bin_path}",
     )
     _js_binary(
         name = name,
         entry_point = ":%s__entry_point" % name,
+        data = kwargs.pop("data", []) + ["@{link_workspace}//{link_package}:{namespace}{bazel_name}"],
         **kwargs
     )
 """
@@ -225,15 +227,16 @@ def _impl(rctx):
             integrity = rctx.attr.integrity,
         )
 
-        mkdir_args = ["mkdir", "-p", _EXTRACT_TO_DIRNAME] if not repo_utils.is_windows(rctx) else ["cmd", "/c", "if not exist {extract_to_dirname} (mkdir {extract_to_dirname})".format(_EXTRACT_TO_DIRNAME = _EXTRACT_TO_DIRNAME.replace("/", "\\"))]
-        result = rctx.execute(mkdir_args)
-        if result.return_code:
-            msg = "mkdir %s failed: \nSTDOUT:\n%s\nSTDERR:\n%s" % (_EXTRACT_TO_DIRNAME, result.stdout, result.stderr)
-            fail(msg)
-
         # npm packages are always published with one top-level directory inside the tarball, tho the name is not predictable
         # so we use tar here which takes a --strip-components N argument instead of rctx.download_and_extract
         untar_args = ["tar", "-xf", _TARBALL_FILENAME, "--strip-components", str(1), "-C", _EXTRACT_TO_DIRNAME]
+
+        if repo_utils.is_linux(rctx):
+            # Some packages have directory permissions missing the executable bit, which prevents GNU tar from
+            # extracting files into the directory. Delay permission restoration for directories until all files
+            # have been extracted. We assume that any linux platform is using GNU tar and has this flag available.
+            untar_args.append("--delay-directory-restore")
+
         result = rctx.execute(untar_args)
         if result.return_code:
             msg = "tar %s failed: \nSTDOUT:\n%s\nSTDERR:\n%s" % (_EXTRACT_TO_DIRNAME, result.stdout, result.stderr)
@@ -259,31 +262,45 @@ def _impl(rctx):
 
     bazel_name = pnpm_utils.bazel_name(rctx.attr.package, rctx.attr.version)
 
-    bin_bzl_file = None
-    if bins:
-        bin_bzl_file = "package_json.bzl"
-        bin_bzl = generated_by_lines + [
-            """load("@aspect_bazel_lib//lib:directory_path.bzl", _directory_path = "directory_path")""",
-            """load("@aspect_rules_js//js:defs.bzl", _js_binary = "js_binary", _js_test = "js_test")""",
-            """load("@aspect_rules_js//js:run_js_binary.bzl", _run_js_binary = "run_js_binary")""",
-        ]
-        for name in bins:
-            bin_bzl.append(
-                _BIN_MACRO_TMPL.format(
-                    bazel_name = bazel_name,
-                    bin_name = name,
-                    bin_path = bins[name],
-                    dir_postfix = pnpm_utils.dir_postfix,
-                    namespace = pnpm_utils.js_package_target_namespace,
-                ),
-            )
+    root_package_json_bzl = False
 
-        rctx.file(bin_bzl_file, "\n".join(bin_bzl + [
-            "bin = struct(%s)\n" % ",\n".join([
-                "{name} = {name}, {name}_test = {name}_test, {name}_binary = {name}_binary".format(name = name)
+    if bins:
+        for link_path in rctx.attr.link_paths:
+            escaped_link_path = link_path.replace("../", "dot_dot/")
+            bin_bzl = generated_by_lines + [
+                """load("@aspect_bazel_lib//lib:directory_path.bzl", _directory_path = "directory_path")""",
+                """load("@aspect_rules_js//js:defs.bzl", _js_binary = "js_binary", _js_test = "js_test")""",
+                """load("@aspect_rules_js//js:run_js_binary.bzl", _run_js_binary = "run_js_binary")""",
+            ]
+            link_package = paths.normalize(paths.join(rctx.attr.root_path, link_path))
+            if link_package == ".":
+                link_package = ""
+            for name in bins:
+                bin_bzl.append(
+                    _BIN_MACRO_TMPL.format(
+                        bazel_name = bazel_name,
+                        bin_name = _sanitize_bin_name(name),
+                        bin_path = bins[name],
+                        dir_postfix = pnpm_utils.dir_postfix,
+                        link_workspace = rctx.attr.link_workspace,
+                        link_package = link_package,
+                        namespace = pnpm_utils.js_package_target_namespace,
+                    ),
+                )
+
+            bin_struct_fields = [
+                "{name} = {name}, {name}_test = {name}_test, {name}_binary = {name}_binary".format(name = _sanitize_bin_name(name))
                 for name in bins
-            ]),
-        ]))
+            ]
+            bin_bzl.append("bin = struct(%s)\n" % ",\n".join(bin_struct_fields))
+
+            if escaped_link_path == ".":
+                root_package_json_bzl = True
+            else:
+                rctx.file(paths.normalize(paths.join(escaped_link_path, "BUILD.bazel")), "\n".join(generated_by_lines + [
+                    "exports_files(%s)" % starlark_codegen_utils.to_list_attr(["package_json.bzl"]),
+                ]))
+            rctx.file(paths.normalize(paths.join(escaped_link_path, "package_json.bzl")), "\n".join(bin_bzl))
 
     if rctx.attr.run_lifecycle_hooks:
         _inject_run_lifecycle_hooks(rctx, pkg_json_path)
@@ -304,10 +321,14 @@ def _impl(rctx):
         version = rctx.attr.version,
     ))
 
-    if bin_bzl_file:
-        build_file.append("exports_files(%s)" % starlark_codegen_utils.to_list_attr([bin_bzl_file]))
+    if root_package_json_bzl:
+        build_file.append("exports_files(%s)" % starlark_codegen_utils.to_list_attr(["package_json.bzl"]))
 
     rctx.file("BUILD.bazel", "\n".join(build_file))
+
+def _sanitize_bin_name(name):
+    """ Sanitize a package name so we can use it in starlark function names """
+    return name.replace("-", "_")
 
 def _impl_links(rctx):
     ref_deps = []
@@ -402,13 +423,13 @@ def _impl_links(rctx):
 _COMMON_ATTRS = {
     "package": attr.string(mandatory = True),
     "version": attr.string(mandatory = True),
+    "root_path": attr.string(),
+    "link_paths": attr.string_list(),
 }
 
 _ATTRS_LINKS = dicts.add(_COMMON_ATTRS, {
     "deps": attr.string_dict(),
     "transitive_closure": attr.string_list_dict(),
-    "root_path": attr.string(),
-    "link_paths": attr.string_list(),
     "lifecycle_build_target": attr.bool(),
 })
 
@@ -418,28 +439,22 @@ _ATTRS = dicts.add(_COMMON_ATTRS, {
     "patches": attr.label_list(),
     "run_lifecycle_hooks": attr.bool(),
     "custom_postinstall": attr.string(),
-    "yq": attr.label(default = "@yq//:yq"),
+    "link_workspace": attr.string(),
 })
 
 def _inject_run_lifecycle_hooks(rctx, pkg_json_path):
-    rctx.execute([
-        yq_path(rctx),
-        "-P",
-        "-o=json",
-        "--inplace",
-        ".scripts._rules_js_run_lifecycle_hooks=\"1\"",
-        pkg_json_path,
-    ], quiet = False)
+    package_json = json.decode(rctx.read(pkg_json_path))
+    package_json.setdefault("scripts", {})["_rules_js_run_lifecycle_hooks"] = "1"
+
+    # TODO: The order of fields in package.json is not preserved making it harder to read
+    rctx.file(pkg_json_path, json.encode_indent(package_json, indent = "  "))
 
 def _inject_custom_postinstall(rctx, pkg_json_path, custom_postinstall):
-    rctx.execute([
-        yq_path(rctx),
-        "-P",
-        "-o=json",
-        "--inplace",
-        ".scripts._rules_js_custom_postinstall=\"%s\"" % custom_postinstall,
-        pkg_json_path,
-    ], quiet = False)
+    package_json = json.decode(rctx.read(pkg_json_path))
+    package_json.setdefault("scripts", {})["_rules_js_custom_postinstall"] = custom_postinstall
+
+    # TODO: The order of fields in package.json is not preserved making it harder to read
+    rctx.file(pkg_json_path, json.encode_indent(package_json, indent = "  "))
 
 def _get_bin_entries(pkg_json, package):
     # https://docs.npmjs.com/cli/v7/configuring-npm/package-json#bin
