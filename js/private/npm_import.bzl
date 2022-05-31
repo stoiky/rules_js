@@ -227,6 +227,12 @@ def _impl(rctx):
             integrity = rctx.attr.integrity,
         )
 
+        mkdir_args = ["mkdir", "-p", _EXTRACT_TO_DIRNAME] if not repo_utils.is_windows(rctx) else ["cmd", "/c", "if not exist {extract_to_dirname} (mkdir {extract_to_dirname})".format(_EXTRACT_TO_DIRNAME = _EXTRACT_TO_DIRNAME.replace("/", "\\"))]
+        result = rctx.execute(mkdir_args)
+        if result.return_code:
+            msg = "mkdir %s failed: \nSTDOUT:\n%s\nSTDERR:\n%s" % (_EXTRACT_TO_DIRNAME, result.stdout, result.stderr)
+            fail(msg)
+
         # npm packages are always published with one top-level directory inside the tarball, tho the name is not predictable
         # so we use tar here which takes a --strip-components N argument instead of rctx.download_and_extract
         untar_args = ["tar", "-xf", _TARBALL_FILENAME, "--strip-components", str(1), "-C", _EXTRACT_TO_DIRNAME]
